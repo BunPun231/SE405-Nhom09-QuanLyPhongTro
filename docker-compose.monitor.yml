@@ -1,0 +1,39 @@
+# ─── Monitoring Stack: CHỈ Grafana ───────────────────────────────────────────
+# ⚠️  Prometheus KHÔNG chạy ở đây — xem load-tests/start-monitoring.sh
+#
+# Lý do: Docker Desktop for Linux tạo VM layer, container không thể
+# reach localhost:8080 của host qua bất kỳ bridge IP nào.
+# Prometheus chạy trực tiếp trên host (binary trong docker/prometheus-binary/).
+#
+# Khởi động toàn bộ stack: ./load-tests/start-monitoring.sh
+#
+# Port map:
+#   9090   → Prometheus   (chạy host binary, không phải Docker)
+#   3100   → Grafana      (Docker, port 3000 đã bị chiếm)
+# ──────────────────────────────────────────────────────────────────────────────
+
+version: '3.8'
+
+services:
+  # ─── Grafana ────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: srr_grafana
+    restart: unless-stopped
+    ports:
+      - "3100:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+# ─── Named Volumes ────────────────────────────────────────────────────────────
+volumes:
+  grafana_data:
+    name: srr_grafana_data

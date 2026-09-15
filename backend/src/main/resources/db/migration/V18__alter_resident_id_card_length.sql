@@ -1,0 +1,1 @@
+ALTER TABLE resident_profiles ALTER COLUMN id_card_number TYPE VARCHAR(255);

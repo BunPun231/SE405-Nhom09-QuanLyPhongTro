@@ -1,0 +1,8 @@
+{
+  "name": "Smart Boarding House Management",
+  "short_name": "RoomRental",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#0b4f6c",
+  "background_color": "#f8f3e6"
+}

@@ -1,0 +1,35 @@
+# docker-compose.dev.yml — Local development infrastructure only
+# Usage: docker compose -f docker-compose.dev.yml up -d
+#        Then run the backend locally: ./mvnw spring-boot:run -pl backend
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: rental-dev-postgres
+    environment:
+      POSTGRES_DB: rental_management
+      POSTGRES_USER: rental_dev
+      POSTGRES_PASSWORD: rental_dev_pass
+    ports:
+      - "15432:5432"
+    volumes:
+      - rental_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rental_dev -d rental_management"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: rental-dev-redis
+    ports:
+      - "16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  rental_postgres_data:

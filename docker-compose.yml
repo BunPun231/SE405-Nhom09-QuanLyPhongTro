@@ -1,0 +1,45 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: room-rental-redis
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: room-rental-backend
+    env_file:
+      - .env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: ${DB_URL}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      GOOGLE_APPLICATION_CREDENTIALS: /app/gcp-credentials.json
+      SEPAY_API_KEY: ${SEPAY_API_KEY}
+      SEPAY_WEBHOOK_URL: ${SEPAY_WEBHOOK_URL}
+      SEPAY_API_URL: ${SEPAY_API_URL}
+      FIREBASE_CREDENTIALS_PATH: ${FIREBASE_CREDENTIALS_PATH}
+
+    entrypoint: ["java", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005", "-jar", "app.jar"]
+    volumes:
+      - ./backend/gcp-credentials.json:/app/gcp-credentials.json:ro
+    depends_on:
+      - redis
+    ports:
+      - "8080:8080"
+      - "5005:5005"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    container_name: room-rental-frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"

@@ -1,0 +1,2 @@
+ALTER TABLE transactions
+ADD COLUMN IF NOT EXISTS overpaid_amount DECIMAL(12,2) NOT NULL DEFAULT 0;

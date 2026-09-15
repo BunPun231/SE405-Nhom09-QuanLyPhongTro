@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Be Vietnam Pro", sans-serif;
+}
+
+@keyframes tour-pulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.4);
+  }
+
+  50% {
+    transform: scale(1.04);
+    box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.6);
+  }
+}
+
+.tour-pulse-button {
+  animation: tour-pulse 2s infinite ease-in-out;
+}
+
+/* 1. Đảm bảo nút gốc của Driver.js có màu chữ đồng nhất, không bị hiệu ứng đè bóng */
+.driver-popover-next-btn,
+.driver-popover-prev-btn {
+  color: #ffffff !important;
+  text-shadow: none !important;
+  /* Khử sạch mọi hiệu ứng đổ bóng chữ do thư viện tạo ra */
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-weight: 600 !important;
+  padding: 8px 16px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+/* Biến nút Quay lại thành chữ màu tối trên nền trắng rõ ràng */
+.driver-popover-prev-btn {
+  background-color: #ffffff !important;
+  color: #374151 !important;
+  border: 1px solid #d1d5db !important;
+}
+
+/* 2. Triệt hạ hiện tượng nhân đôi chữ nếu có phần tử text thuần bị render thừa */
+.driver-popover-next-btn::first-line,
+.driver-popover-prev-btn::first-line {
+  line-height: 1 !important;
+}

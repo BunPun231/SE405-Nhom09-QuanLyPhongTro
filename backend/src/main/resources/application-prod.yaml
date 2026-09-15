@@ -1,0 +1,50 @@
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://YOUR-NEON-HOST/YOUR_DATABASE?sslmode=require}
+    username: ${DB_USERNAME:YOUR_NEON_USERNAME}
+    password: ${DB_PASSWORD:YOUR_NEON_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DB_POOL_SIZE:5}
+      minimum-idle: ${DB_POOL_MIN_IDLE:1}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT:10000}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+    repair-on-migrate: true
+  data:
+    redis:
+      repositories:
+        enabled: false
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+
+server:
+  forward-headers-strategy: framework
+
+logging:
+  level:
+    root: INFO
+
+# ─── Observability / Monitoring ───────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+    health:
+      show-details: when-authorized
+  metrics:
+    enable:
+      all: true
+    tags:
+      application: ${spring.application.name}
+      profile: prod
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true

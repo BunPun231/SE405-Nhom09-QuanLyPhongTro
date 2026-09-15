@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# ─── Scrape Jobs ──────────────────────────────────────────────────────────────
+scrape_configs:
+  # Spring Boot Application (actuator/prometheus)
+  # Prometheus chạy network_mode: host → localhost = host machine trực tiếp
+  - job_name: 'spring-boot-smart-room-rental'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 10s
+    static_configs:
+      - targets:
+          - 'localhost:8080'
+        labels:
+          application: 'smart-room-rental'
+          environment: 'dev'
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

@@ -1,0 +1,78 @@
+# docker-compose.local.yml — Fully Dockerized Local Development with Hot Reload
+# Usage: docker compose -f docker-compose.local.yml up -d
+# This will start the database, redis, backend, and frontend inside Docker.
+# Both Backend and Frontend directories are volume-mapped for hot-reloading.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: rental-local-postgres
+    environment:
+      POSTGRES_DB: rental_management
+      POSTGRES_USER: rental_dev
+      POSTGRES_PASSWORD: rental_dev_pass
+    ports:
+      - "15432:5432"
+    volumes:
+      - rental_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rental_dev -d rental_management"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: rental-local-redis
+    ports:
+      - "16379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    image: maven:3.9.9-eclipse-temurin-21
+    container_name: rental-local-backend
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - maven_cache:/root/.m2
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:postgresql://postgres:5432/rental_management
+      DB_USERNAME: rental_dev
+      DB_PASSWORD: rental_dev_pass
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: ${JWT_SECRET:-change-me-super-secret-key-at-least-32-characters-long}
+    ports:
+      - "8080:8080"
+    command: ["./mvnw", "spring-boot:run"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: node:18-alpine
+    container_name: rental-local-frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      # Cache node_modules to avoid re-downloading if container restarts
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_BACKEND_URL: http://backend:8080
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    depends_on:
+      - backend
+
+volumes:
+  rental_postgres_data:
+  maven_cache:
+  frontend_node_modules:

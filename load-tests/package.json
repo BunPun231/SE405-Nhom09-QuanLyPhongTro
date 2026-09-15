@@ -1,0 +1,14 @@
+{
+  "name": "smart-room-rental-load-tests",
+  "version": "1.0.0",
+  "description": "Load test & seed scripts for Smart Room Rental performance demo",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "seed": "node seed-massive.js",
+    "test:spike": "k6 run dashboard_spike_test.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.7"
+  }
+}
