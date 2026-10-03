@@ -56,4 +56,4 @@ docker/prometheus-binary
 
 frontend/pnpm-lock.yaml
 frontend/pnpm-workspace.yaml
-backend/src/main/resources/firebase-service-account.json
+**/firebase-service-account.json
