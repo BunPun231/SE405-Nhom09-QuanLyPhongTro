@@ -1,0 +1,28 @@
+# Flutter / Dart gitignore
+.dart_tool/
+.build/
+.pub-cache/
+.pub/
+build/
+
+# Android
+android/app/debug
+android/app/release
+android/.gradle
+android/captures
+android/gradlew
+android/gradlew.bat
+
+# iOS
+ios/Runner.xcodeproj/project.xcworkspace
+ios/Runner.xcodeproj/xcuserdata
+ios/Pods
+ios/.symlinks
+
+# Web
+web/build
+
+# IDE
+.idea/
+.vscode/
+*.iml
