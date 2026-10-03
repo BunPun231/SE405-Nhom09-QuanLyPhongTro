@@ -43,8 +43,8 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
   static const _quickActions = [
     _QuickAction('Ghi điện nước', 'Chỉ số tháng này', Icons.bolt_rounded, 'utility-reading'),
     _QuickAction('Thu tiền QR', 'Hóa đơn cần thu', Icons.qr_code_2_rounded, 'invoices'),
-    _QuickAction('Phòng trống', 'Xem phòng', Icons.apartment_rounded, 'rooms'),
-    _QuickAction('Báo sự cố', 'Quản lý sự cố', Icons.build_rounded, 'maintenance'),
+    _QuickAction('Phòng trọ', 'Xem phòng', Icons.apartment_rounded, 'rooms'),
+    _QuickAction('Hợp đồng', 'Quản lý hợp đồng', Icons.description_rounded, 'contracts'),
   ];
 
   @override
@@ -179,40 +179,39 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 14),
 
           // Quick Actions Section
           const Text('Truy cập nhanh', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 10,
-            mainAxisSpacing: 10,
-            childAspectRatio: 1.6,
+            crossAxisSpacing: 8,
+            mainAxisSpacing: 8,
+            childAspectRatio: 1.7,
             children: _quickActions.map((a) => GestureDetector(
               onTap: () => widget.onNavigate(a.page),
               child: Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: AppColors.borderLight),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      width: 34, height: 34,
-                      decoration: BoxDecoration(color: AppColors.backgroundLight, borderRadius: BorderRadius.circular(10)),
-                      child: Icon(a.icon, size: 18, color: AppColors.primary),
+                      width: 28, height: 28,
+                      decoration: BoxDecoration(color: AppColors.backgroundLight, borderRadius: BorderRadius.circular(8)),
+                      child: Icon(a.icon, size: 16, color: AppColors.primary),
                     ),
-                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(a.label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                      Text(a.detail, style: const TextStyle(fontSize: 10, color: AppColors.textSecondaryLight)),
-                    ]),
+                    const SizedBox(height: 6),
+                    Text(a.label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(a.detail, style: const TextStyle(fontSize: 10, color: AppColors.textSecondaryLight), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
               ),

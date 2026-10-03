@@ -33,11 +33,9 @@ class MobileMenuDrawer extends StatelessWidget {
           _MenuSection('Vận hành', [
             _MenuItem('contracts', 'Hợp đồng', 'Thời hạn & cọc', Icons.description_rounded),
             _MenuItem('invoices', 'Hóa đơn & VietQR', 'Thu tiền hàng tháng', Icons.receipt_long_rounded),
-            _MenuItem('maintenance', 'Bảo trì & Sự cố', 'Tiếp nhận & phân thợ', Icons.build_rounded),
             _MenuItem('utility-reading', 'Ghi số Điện Nước', 'Chỉ số hàng tháng', Icons.bolt_rounded),
           ]),
-          _MenuSection('Tài sản & Dịch vụ', [
-            _MenuItem('equipment', 'Thiết bị phòng', 'Tài sản tòa nhà', Icons.inventory_2_rounded),
+          _MenuSection('Dịch vụ', [
             _MenuItem('services', 'Đơn giá Dịch vụ', 'Điện, nước, wifi', Icons.settings_rounded),
           ]),
           _MenuSection('Báo cáo & Tương tác', [

@@ -227,6 +227,7 @@ class _ManagerRoomsScreenState extends State<ManagerRoomsScreen> {
                                     ? currentStatus
                                     : 'AVAILABLE',
                                 isDense: true,
+                                isExpanded: true,
                                 icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 20),
                                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
                                 onChanged: room.status == 'RENTED'
@@ -260,11 +261,11 @@ class _ManagerRoomsScreenState extends State<ManagerRoomsScreen> {
                                         }
                                       },
                                 items: const [
-                                  DropdownMenuItem(value: 'AVAILABLE', child: Text('Trống (AVAILABLE)')),
-                                  DropdownMenuItem(value: 'RENTED', enabled: false, child: Text('Đang thuê (RENTED)')),
-                                  DropdownMenuItem(value: 'DEPOSITED', child: Text('Đặt cọc (DEPOSITED)')),
-                                  DropdownMenuItem(value: 'REPAIRING', child: Text('Sửa chữa (REPAIRING)')),
-                                  DropdownMenuItem(value: 'OUT_OF_BUSINESS', child: Text('Ngừng h/động (OUT_OF_BUSINESS)')),
+                                  DropdownMenuItem(value: 'AVAILABLE', child: Text('Trống', overflow: TextOverflow.ellipsis)),
+                                  DropdownMenuItem(value: 'RENTED', enabled: false, child: Text('Đang thuê', overflow: TextOverflow.ellipsis)),
+                                  DropdownMenuItem(value: 'DEPOSITED', child: Text('Đặt cọc', overflow: TextOverflow.ellipsis)),
+                                  DropdownMenuItem(value: 'REPAIRING', child: Text('Sửa chữa', overflow: TextOverflow.ellipsis)),
+                                  DropdownMenuItem(value: 'OUT_OF_BUSINESS', child: Text('Ngừng h/đ', overflow: TextOverflow.ellipsis)),
                                 ],
                               ),
                             ),

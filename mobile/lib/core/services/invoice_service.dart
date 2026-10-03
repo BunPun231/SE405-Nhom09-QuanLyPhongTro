@@ -102,6 +102,7 @@ class MeterReadingResult {
   final double? newReading;
   final double? consumption;
   final String status; // PENDING | SUBMITTED | APPROVED | REJECTED
+  final String? imageUrl;
 
   MeterReadingResult({
     required this.id,
@@ -114,6 +115,7 @@ class MeterReadingResult {
     this.newReading,
     this.consumption,
     required this.status,
+    this.imageUrl,
   });
 
   factory MeterReadingResult.fromJson(Map<String, dynamic> json) {
@@ -128,6 +130,7 @@ class MeterReadingResult {
       newReading: (json['newReading'] as num?)?.toDouble(),
       consumption: (json['consumption'] as num?)?.toDouble(),
       status: json['status'] ?? 'PENDING',
+      imageUrl: json['imageUrl'] ?? json['readingImageUrl'],
     );
   }
 }
@@ -182,6 +185,22 @@ class InvoiceService {
     final data = await ApiClient.get('/api/v1/invoices/my-balance');
     return (data as num).toDouble();
   }
+
+  /// Get any resident's credit balance — GET /api/v1/invoices/balance/{residentId}
+  static Future<double> getResidentBalance(String residentId) async {
+    final data = await ApiClient.get('/api/v1/invoices/balance/$residentId');
+    return (data as num).toDouble();
+  }
+
+  /// Get multiple residents' credit balances — GET /api/v1/invoices/balances
+  static Future<Map<String, double>> getResidentBalances(List<String> residentIds) async {
+    if (residentIds.isEmpty) return {};
+    final data = await ApiClient.get('/api/v1/invoices/balances', params: {
+      'residentIds': residentIds.join(','),
+    });
+    final map = data as Map<String, dynamic>;
+    return map.map((key, value) => MapEntry(key, (value as num).toDouble()));
+  }
 }
 
 // ─── MeterReadingService (mirror meterReadingService of invoiceService.ts) ──
@@ -229,6 +248,11 @@ class MeterReadingService {
       params: reason != null ? {'reason': reason} : null,
     );
     return MeterReadingResult.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Bulk approve — POST /api/v1/meter-readings/bulk-approve
+  static Future<void> bulkApprove(List<int> ids) async {
+    await ApiClient.post('/api/v1/meter-readings/bulk-approve', body: {'ids': ids});
   }
 }
 

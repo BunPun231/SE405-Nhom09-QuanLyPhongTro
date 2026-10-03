@@ -12,7 +12,6 @@ import 'manager/manager_dashboard_screen.dart';
 import 'manager/manager_rooms_screen.dart';
 import 'manager/manager_invoices_screen.dart';
 import 'manager/manager_utility_reading_screen.dart';
-import 'manager/manager_maintenance_screen.dart';
 import 'manager/manager_tenants_screen.dart';
 import 'manager/manager_contracts_screen.dart';
 import 'manager/manager_services_screen.dart';
@@ -183,7 +182,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           case 'contracts': return const ManagerContractsScreen();
           case 'invoices': return const ManagerInvoicesScreen();
           case 'utility-reading': return const ManagerUtilityReadingScreen();
-          case 'maintenance': return const ManagerMaintenanceScreen();
           case 'services': return const ManagerServicesScreen();
           case 'broadcast': return const ManagerNotificationsScreen();
           case 'analytics': return const ManagerReportsScreen();
