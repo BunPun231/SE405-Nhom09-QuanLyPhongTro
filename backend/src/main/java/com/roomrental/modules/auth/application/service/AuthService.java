@@ -27,6 +27,9 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
+import com.roomrental.common.service.EmailService;
+import com.roomrental.common.service.SmsService;
+
 /**
  * Application service for authentication use cases (UC01, UC02).
  */
@@ -40,6 +43,8 @@ public class AuthService {
     private final PasswordHistoryService passwordHistoryService;
     private final org.springframework.data.redis.core.StringRedisTemplate redisTemplate;
     private final ApplicationEventPublisher eventPublisher;
+    private final EmailService emailService;
+    private final SmsService smsService;
 
     public AuthService(
             TenantRepository tenantRepository,
@@ -48,7 +53,9 @@ public class AuthService {
             JwtTokenService jwtTokenService,
             PasswordHistoryService passwordHistoryService,
             org.springframework.data.redis.core.StringRedisTemplate redisTemplate,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            EmailService emailService,
+            SmsService smsService
     ) {
         this.tenantRepository = tenantRepository;
         this.userRepository = userRepository;
@@ -57,7 +64,11 @@ public class AuthService {
         this.passwordHistoryService = passwordHistoryService;
         this.redisTemplate = redisTemplate;
         this.eventPublisher = eventPublisher;
+        this.emailService = emailService;
+        this.smsService = smsService;
     }
+
+
 
     /**
      * UC01: Self-registration for a new Manager.
@@ -194,9 +205,22 @@ public class AuthService {
         String redisKey = "pwd_reset_otp:" + identity;
         redisTemplate.opsForValue().set(redisKey, otp, java.time.Duration.ofMinutes(5));
 
-        // TODO: Send OTP via Email/SMS
-        System.out.println("OTP for " + identity + ": " + otp);
+        // Route OTP delivery to SMS and/or Email based on user identity input
+        boolean isEmailInput = identity.contains("@");
+        if (isEmailInput) {
+            emailService.sendOtpEmail(identity, otp);
+        } else {
+            String targetPhone = (user.getPhone() != null && !user.getPhone().isBlank()) ? user.getPhone() : identity;
+            smsService.sendOtpSms(targetPhone, otp);
+
+            // Also send email backup if user has email configured
+            if (user.getEmail() != null && !user.getEmail().isBlank()) {
+                emailService.sendOtpEmail(user.getEmail(), otp);
+            }
+        }
     }
+
+
 
     @Transactional
     public void resetPassword(com.roomrental.modules.auth.application.dto.ResetPasswordCommand command) {

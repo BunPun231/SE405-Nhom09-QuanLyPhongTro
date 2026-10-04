@@ -1,1 +1,13 @@
+.git
+.gitignore
 **/node_modules
+**/target
+**/dist
+**/build
+**/.idea
+**/.vscode
+**/.gemini
+**/.brain
+*.log
+tmp
+load-tests

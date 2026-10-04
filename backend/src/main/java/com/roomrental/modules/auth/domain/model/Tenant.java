@@ -13,6 +13,7 @@ public class Tenant {
     private String name;
     private UUID ownerUserId;
     private TenantStatus status;
+    private String workspaceConfig;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 
@@ -30,9 +31,13 @@ public class Tenant {
     public TenantStatus getStatus() { return status; }
     public void setStatus(TenantStatus status) { this.status = status; }
 
+    public String getWorkspaceConfig() { return workspaceConfig; }
+    public void setWorkspaceConfig(String workspaceConfig) { this.workspaceConfig = workspaceConfig; }
+
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
 
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
 }
+

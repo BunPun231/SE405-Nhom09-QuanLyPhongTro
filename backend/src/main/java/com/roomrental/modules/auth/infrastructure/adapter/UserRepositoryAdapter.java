@@ -54,4 +54,25 @@ public class UserRepositoryAdapter implements UserRepository {
     public boolean existsByEmail(String email) {
         return jpa.existsByEmail(email);
     }
+
+    @Override
+    public boolean existsByPhoneAndIdNot(String phone, UUID id) {
+        return jpa.existsByPhoneAndIdNot(phone, id);
+    }
+
+    @Override
+    public boolean existsByEmailAndIdNot(String email, UUID id) {
+        return jpa.existsByEmailAndIdNot(email, id);
+    }
+
+    @Override
+    public org.springframework.data.domain.Page<User> findAllManagers(
+            String search,
+            com.roomrental.modules.auth.domain.model.UserStatus status,
+            org.springframework.data.domain.Pageable pageable
+    ) {
+        String statusStr = status != null ? status.name() : null;
+        return jpa.findAllManagers(search, statusStr, pageable).map(mapper::toDomain);
+    }
 }
+
