@@ -1,7 +1,26 @@
-import { useState } from "react";
-import { Save, Shield, Bell, CreditCard, Building, User, Eye, EyeOff, CheckCircle2, AlertCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import {
+  Save,
+  Shield,
+  User,
+  Sliders,
+  Eye,
+  EyeOff,
+  CheckCircle2,
+  AlertCircle,
+  Building2,
+  Users,
+  FileText,
+  Gauge,
+  Receipt,
+  BarChart3,
+  Layers,
+  Settings as SettingsIcon
+} from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { useAuthStore } from "@/store/authStore";
+import { useWorkspaceStore } from "@/store/workspaceStore";
+import { userService } from "@/services/userService";
 import { authService } from "@/services/authService";
 import { extractError } from "@/lib/api";
 
@@ -68,7 +87,7 @@ function ChangePasswordSection() {
 
   return (
     <div className="space-y-6 max-w-lg">
-      <h2 className="text-base font-bold text-brand-ink border-b border-slate-100 pb-3">Đổi mật khẩu (UC05)</h2>
+      <h2 className="text-base font-bold text-brand-ink border-b border-slate-100 pb-3">Đổi mật khẩu</h2>
 
       {success && (
         <div className="flex items-center gap-3 rounded-xl bg-emerald-50 border border-emerald-100 p-4 text-emerald-700">
@@ -110,17 +129,113 @@ function ChangePasswordSection() {
   );
 }
 
+// ============ WORKSPACE CONFIGURATION TAB (UC17) ============
+function WorkspaceConfigSection() {
+  const { modules, updateModules, fetchConfig } = useWorkspaceStore();
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetchConfig();
+  }, []);
+
+  const moduleDefinitions = [
+    { key: "motels", label: "Quản lý Khu trọ & Phòng", desc: "Quản lý danh sách tòa nhà, danh sách phòng và trạng thái phòng", icon: Building2 },
+    { key: "services", label: "Quản lý Dịch vụ", desc: "Cấu hình điện, nước, internet, rác và các phí dịch vụ kèm theo", icon: SettingsIcon },
+    { key: "residents", label: "Quản lý Khách thuê", desc: "Lưu trữ thông tin khách thuê, giấy tờ căn cước", icon: Users },
+    { key: "contracts", label: "Hợp đồng & Tiền cọc", desc: "Tạo và quản lý thời hạn hợp đồng, tiền cọc phòng", icon: FileText },
+    { key: "meter", label: "Ghi chỉ số Điện/Nước", desc: "Nhập chỉ số công tơ điện nước hàng tháng", icon: Gauge },
+    { key: "invoices", label: "Quản lý Hóa đơn", desc: "Tạo hóa đơn tự động và theo dõi thanh toán", icon: Receipt },
+    { key: "reports", label: "Thống kê & Báo cáo", desc: "Báo cáo doanh thu, công nợ và tỷ lệ lấp đầy", icon: BarChart3 },
+    { key: "auditLog", label: "Nhật ký hoạt động", desc: "Lưu lịch sử tác động và thay đổi trên hệ thống", icon: Layers },
+  ];
+
+  const handleToggle = async (key: string, currentValue: boolean) => {
+    setSaving(true);
+    setError("");
+    try {
+      await updateModules({ [key]: !currentValue });
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 2000);
+    } catch (err) {
+      setError(extractError(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div>
+        <h2 className="text-base font-bold text-brand-ink border-b border-slate-100 pb-3">
+          Tùy chỉnh Không gian làm việc (UC17)
+        </h2>
+        <p className="text-xs text-slate-500 mt-2">
+          Bật hoặc tắt các module chức năng để tinh gọn giao diện thanh Menu (Sidebar) cho phù hợp với quy mô quản lý của bạn.
+        </p>
+      </div>
+
+      {success && (
+        <div className="flex items-center gap-3 rounded-xl bg-emerald-50 border border-emerald-100 p-4 text-emerald-700">
+          <CheckCircle2 size={18} />
+          <span className="text-sm font-medium">Đã cập nhật cấu hình workspace thành công!</span>
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-3 rounded-xl bg-red-50 border border-red-100 p-4 text-red-700">
+          <AlertCircle size={18} />
+          <span className="text-sm">{error}</span>
+        </div>
+      )}
+
+      <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden bg-slate-50/50">
+        {moduleDefinitions.map((mod) => {
+          const isEnabled = modules[mod.key] ?? true;
+          return (
+            <div key={mod.key} className="p-4 flex items-center justify-between hover:bg-white transition-colors">
+              <div className="flex items-start gap-3.5">
+                <div className={`p-2.5 rounded-xl ${isEnabled ? "bg-brand-deep/10 text-brand-deep" : "bg-slate-200 text-slate-500"}`}>
+                  <mod.icon size={20} />
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-800">{mod.label}</h4>
+                  <p className="text-xs text-slate-500">{mod.desc}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleToggle(mod.key, isEnabled)}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isEnabled ? "bg-brand-deep" : "bg-slate-300"
+                  }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ============ MAIN SETTINGS PAGE ============
-const TABS = [
-  { id: "profile", label: "Hồ sơ", icon: User },
-  { id: "security", label: "Bảo mật", icon: Shield },
-] as const;
-
-type TabId = "profile" | "security";
-
 export function SettingsPage() {
   const { user, setUser } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<TabId>("profile");
+  const isManager = user?.role === "MANAGER";
+
+  const TABS = [
+    { id: "profile", label: "Hồ sơ cá nhân", icon: User },
+    { id: "security", label: "Bảo mật & Mật khẩu", icon: Shield },
+    ...(isManager ? [{ id: "workspace", label: "Tùy chỉnh Workspace", icon: Sliders }] : [])
+  ];
+
+  const [activeTab, setActiveTab] = useState<string>("profile");
   const [isSaving, setIsSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
@@ -129,43 +244,62 @@ export function SettingsPage() {
   const [phone, setPhone] = useState(user?.phone || "");
   const [email, setEmail] = useState(user?.email || "");
 
-  const handleSave = () => {
+  // Load latest profile from API on mount
+  useEffect(() => {
+    userService.getProfile()
+      .then((profile) => {
+        setName(profile.fullName);
+        setEmail(profile.email);
+        setPhone(profile.phone || "");
+        if (user) {
+          setUser({
+            ...user,
+            name: profile.fullName,
+            email: profile.email,
+            phone: profile.phone
+          });
+        }
+      })
+      .catch(() => { });
+  }, []);
+
+  const handleSaveProfile = async () => {
     setIsSaving(true);
     setError("");
     setSuccess(false);
     try {
+      const updated = await userService.updateProfile({ fullName: name, phone, email });
       if (user) {
         setUser({
           ...user,
-          name,
-          phone,
-          email,
+          name: updated.fullName,
+          phone: updated.phone,
+          email: updated.email
         });
       }
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
-      setError("Không thể lưu thay đổi.");
+      setError(extractError(err));
     } finally {
       setIsSaving(false);
     }
   };
 
   const inputClass = "w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-deep/30 focus:border-brand-deep transition-all";
-  const areaClass = `${inputClass} resize-none`;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold font-display text-brand-ink">Cài đặt</h1>
-          <p className="text-sm text-slate-500 mt-1">Quản lý tài khoản và cấu hình hệ thống</p>
+          <h1 className="text-2xl font-bold font-display text-brand-ink">Cài đặt hệ thống</h1>
+          <p className="text-sm text-slate-500 mt-1">Quản lý thông tin cá nhân, mật khẩu bảo mật và không gian làm việc</p>
         </div>
-        {activeTab !== "security" && (
-          <Button onClick={handleSave} disabled={isSaving}>
+        {activeTab === "profile" && (
+          <Button onClick={handleSaveProfile} disabled={isSaving}>
             <Save size={16} className="mr-2" />
-            {isSaving ? "Đang lưu..." : "Lưu thay đổi"}
+            {isSaving ? "Đang lưu..." : "Lưu hồ sơ"}
           </Button>
         )}
       </div>
@@ -173,7 +307,7 @@ export function SettingsPage() {
       {success && (
         <div className="flex items-center gap-3 rounded-xl bg-emerald-50 border border-emerald-100 p-4 text-emerald-700 max-w-lg">
           <CheckCircle2 size={18} />
-          <span className="text-sm font-medium">Thay đổi thông tin hồ sơ đã được lưu thành công!</span>
+          <span className="text-sm font-medium">Thay đổi thông tin hồ sơ đã được cập nhật thành công!</span>
         </div>
       )}
       {error && (
@@ -185,17 +319,16 @@ export function SettingsPage() {
 
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Sidebar */}
-        <div className="w-full lg:w-56 space-y-1">
+        <div className="w-full lg:w-64 space-y-1">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               id={`settings-tab-${tab.id}`}
               onClick={() => setActiveTab(tab.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${
-                activeTab === tab.id
-                  ? "bg-white text-brand-deep shadow-sm border border-slate-200"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-xl transition-all ${activeTab === tab.id
+                ? "bg-white text-brand-deep shadow-sm border border-slate-200 font-semibold"
+                : "text-slate-600 hover:bg-slate-100"
+                }`}
             >
               <tab.icon size={18} />
               {tab.label}
@@ -208,27 +341,28 @@ export function SettingsPage() {
           {/* Profile Tab */}
           {activeTab === "profile" && (
             <div className="space-y-6 max-w-lg">
-              <h2 className="text-base font-bold text-brand-ink border-b border-slate-100 pb-3">Thông tin cá nhân</h2>
+              <h2 className="text-base font-bold text-brand-ink border-b border-slate-100 pb-3">Hồ sơ cá nhân</h2>
               {/* Avatar */}
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-2xl bg-brand-deep flex items-center justify-center text-white font-bold text-2xl">
-                  {user?.name?.charAt(0).toUpperCase() ?? "U"}
+                  {name?.charAt(0).toUpperCase() ?? "U"}
                 </div>
                 <div>
-                  <p className="font-semibold text-brand-ink">{user?.name}</p>
-                  <p className="text-sm text-slate-500 capitalize">{user?.role?.toLowerCase()}</p>
+                  <p className="font-semibold text-brand-ink">{name}</p>
+                  <p className="text-xs text-slate-500 uppercase font-medium">{user?.role}</p>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <label className="text-sm font-medium text-slate-700">Họ và tên</label>
+                  <label className="text-sm font-medium text-slate-700">Họ và tên *</label>
                   <input
                     id="profile-name"
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     className={inputClass}
+                    required
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
@@ -240,6 +374,7 @@ export function SettingsPage() {
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
                       className={inputClass}
+                      placeholder="0912345678"
                     />
                   </div>
                   <div className="space-y-1">
@@ -250,25 +385,7 @@ export function SettingsPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className={inputClass}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-t border-slate-100 pt-6">
-                <h3 className="text-sm font-bold text-brand-ink mb-4">Cấu hình hợp đồng mặc định</h3>
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-slate-700">Tiền cọc mặc định (tháng)</label>
-                    <input id="profile-deposit" type="number" defaultValue={1} min={1} max={6} className={inputClass} />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-sm font-medium text-slate-700">Quy định trả phòng</label>
-                    <textarea
-                      id="profile-policy"
-                      rows={3}
-                      defaultValue="- Báo trước 30 ngày&#10;- Hoàn 100% tiền cọc nếu không vi phạm&#10;- Phạt 100% tiền cọc nếu vi phạm hợp đồng"
-                      className={areaClass}
+                      placeholder="user@example.com"
                     />
                   </div>
                 </div>
@@ -280,18 +397,12 @@ export function SettingsPage() {
           {activeTab === "security" && (
             <div className="space-y-8">
               <ChangePasswordSection />
-
-              <div className="max-w-lg border-t border-slate-100 pt-6">
-                <h2 className="text-base font-bold text-brand-ink pb-3">Phiên đăng nhập</h2>
-                <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-slate-800 text-sm">Thiết bị hiện tại</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Trình duyệt web • Đăng nhập gần đây</p>
-                  </div>
-                  <span className="text-xs bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full font-medium">Đang hoạt động</span>
-                </div>
-              </div>
             </div>
+          )}
+
+          {/* Workspace Tab (UC17) */}
+          {activeTab === "workspace" && (
+            <WorkspaceConfigSection />
           )}
         </div>
       </div>

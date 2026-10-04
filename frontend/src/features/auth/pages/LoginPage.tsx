@@ -46,7 +46,11 @@ export function LoginPage() {
         hasCompletedOnboarding: result.hasCompletedOnboarding,
       });
 
-      navigate("/dashboard");
+      if (result.role === "ADMIN") {
+        navigate("/admin/dashboard");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err) {
       setError(extractError(err));
     } finally {
