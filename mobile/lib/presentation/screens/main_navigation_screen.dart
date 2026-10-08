@@ -5,7 +5,7 @@ import '../../core/network/api_client.dart';
 import '../widgets/mobile_header.dart';
 import '../widgets/mobile_bottom_nav.dart';
 import '../widgets/mobile_menu_drawer.dart';
-import 'auth/login_screen.dart';
+import 'auth/app_router.dart';
 
 // Manager Screens
 import 'manager/manager_dashboard_screen.dart';
@@ -27,6 +27,7 @@ import 'tenant/tenant_invoices_screen.dart';
 import 'tenant/tenant_maintenance_screen.dart';
 import 'tenant/tenant_contract_screen.dart';
 import 'tenant/tenant_profile_screen.dart';
+import 'tenant/tenant_utility_reading_screen.dart';
 
 // Technician Screens
 import 'technician/technician_tasks_screen.dart';
@@ -86,20 +87,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     await prefs.remove('user_fullname');
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(
-        builder: (_) => LoginScreen(
-          onLoginSuccess: (role, userName) {
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(
-                builder: (_) => MainNavigationScreen(
-                  initialRole: role,
-                  userName: userName,
-                ),
-              ),
-            );
-          },
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => const AppRouter()),
       (route) => false,
     );
   }
@@ -191,12 +179,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         }
       case UserRole.tenant:
         switch (_currentPage) {
-          case 'home': return TenantHomeScreen(onNavigateTab: (i) { const pages = ['home','invoices','maintenance','contract','profile']; if (i < pages.length) _navigateTo(pages[i]); });
+          case 'home': return TenantHomeScreen(onNavigateTab: (i) { const pages = ['home','invoices','maintenance','contract','utility-reading','profile']; if (i < pages.length) _navigateTo(pages[i]); });
           case 'invoices': return const TenantInvoicesScreen();
+          case 'utility-reading': return const TenantUtilityReadingScreen();
           case 'maintenance': return const TenantMaintenanceScreen();
           case 'contract': return const TenantContractScreen();
-          case 'profile': return const TenantProfileScreen();
-          default: return TenantHomeScreen(onNavigateTab: (i) { const pages = ['home','invoices','maintenance','contract','profile']; if (i < pages.length) _navigateTo(pages[i]); });
+          case 'profile': return TenantProfileScreen(onLogout: _handleLogout);
+          default: return TenantHomeScreen(onNavigateTab: (i) { const pages = ['home','invoices','maintenance','contract','utility-reading','profile']; if (i < pages.length) _navigateTo(pages[i]); });
         }
       case UserRole.technician:
         switch (_currentPage) {
@@ -210,6 +199,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           case 'admin-dashboard': return const AdminDashboardScreen();
           case 'admin-users': return const AdminUsersScreen();
           case 'admin-subscriptions': return const AdminSubscriptionsScreen();
+          case 'dashboard': return ManagerDashboardScreen(onNavigate: _navigateTo);
+          case 'motels': return const ManagerMotelsScreen();
+          case 'rooms': return const ManagerRoomsScreen();
+          case 'tenants': return const ManagerTenantsScreen();
+          case 'contracts': return const ManagerContractsScreen();
+          case 'invoices': return const ManagerInvoicesScreen();
+          case 'utility-reading': return const ManagerUtilityReadingScreen();
+          case 'services': return const ManagerServicesScreen();
+          case 'broadcast': return const ManagerNotificationsScreen();
+          case 'analytics': return const ManagerReportsScreen();
+          case 'audit-log': return const ManagerAuditLogScreen();
+          case 'profile': return ManagerProfileScreen(onLogout: _handleLogout);
           default: return const AdminDashboardScreen();
         }
     }

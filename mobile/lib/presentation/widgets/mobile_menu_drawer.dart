@@ -47,8 +47,9 @@ class MobileMenuDrawer extends StatelessWidget {
         ];
       case UserRole.tenant:
         return [
-          _MenuSection('Phòng trọ', [
+          _MenuSection('Phòng trọ & Dịch vụ', [
             _MenuItem('home', 'Trang chủ', 'Thông tin phòng của tôi', Icons.home_rounded),
+            _MenuItem('utility-reading', 'Ghi số Điện Nước', 'Tự báo chỉ số phòng', Icons.bolt_rounded),
             _MenuItem('invoices', 'Hóa đơn', 'Thanh toán VietQR', Icons.receipt_rounded),
             _MenuItem('maintenance', 'Báo sự cố', 'Gửi yêu cầu sửa chữa', Icons.handyman_rounded),
             _MenuItem('contract', 'Hợp đồng', 'Thông tin hợp đồng thuê', Icons.description_rounded),
@@ -65,10 +66,30 @@ class MobileMenuDrawer extends StatelessWidget {
         ];
       case UserRole.admin:
         return [
-          _MenuSection('Hệ thống', [
+          _MenuSection('Quản lý chính', [
+            _MenuItem('dashboard', 'Tổng quan', 'Doanh thu & lấp đầy', Icons.home_rounded),
+            _MenuItem('motels', 'Dãy trọ & Tòa nhà', 'Quản lý cơ sở', Icons.business_rounded),
+            _MenuItem('rooms', 'Phòng trọ', 'Danh sách & trạng thái', Icons.apartment_rounded),
+            _MenuItem('tenants', 'Khách thuê', 'Hồ sơ & thông tin', Icons.people_alt_rounded),
+          ]),
+          _MenuSection('Vận hành', [
+            _MenuItem('contracts', 'Hợp đồng', 'Thời hạn & cọc', Icons.description_rounded),
+            _MenuItem('invoices', 'Hóa đơn & VietQR', 'Thu tiền hàng tháng', Icons.receipt_long_rounded),
+            _MenuItem('utility-reading', 'Ghi số Điện Nước', 'Chỉ số hàng tháng', Icons.bolt_rounded),
+          ]),
+          _MenuSection('Dịch vụ', [
+            _MenuItem('services', 'Đơn giá Dịch vụ', 'Điện, nước, wifi', Icons.settings_rounded),
+          ]),
+          _MenuSection('Báo cáo & Tương tác', [
+            _MenuItem('broadcast', 'Gửi thông báo', 'SMS, Zalo, App Push', Icons.send_rounded),
+            _MenuItem('analytics', 'Thống kê & Báo cáo', 'Báo cáo doanh thu & lấp đầy', Icons.bar_chart_rounded),
+            _MenuItem('audit-log', 'Nhật ký thao tác', 'Lịch sử hệ thống', Icons.history_rounded),
+          ]),
+          _MenuSection('Quản trị SaaS', [
             _MenuItem('admin-dashboard', 'SaaS Overview', 'Thống kê toàn hệ thống', Icons.dashboard_rounded),
             _MenuItem('admin-users', 'Người dùng', 'Quản lý tài khoản', Icons.people_alt_rounded),
             _MenuItem('admin-subscriptions', 'Gói cước', 'Quản lý subscription', Icons.shield_rounded),
+            _MenuItem('profile', 'Tài khoản', 'Hồ sơ cá nhân', Icons.person_rounded),
           ]),
         ];
     }

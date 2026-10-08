@@ -1161,8 +1161,10 @@ class _ManagerRoomsScreenState extends State<ManagerRoomsScreen> {
             const Text('Tạo từng phòng hoặc bấm tạo hàng loạt\nđể chuẩn bị phòng nhanh chóng',
                 textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: AppColors.textSecondaryLight, height: 1.5)),
             const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 12,
+              runSpacing: 10,
               children: [
                 OutlinedButton.icon(
                   onPressed: _showBulkAddRoomSheet,
@@ -1173,7 +1175,6 @@ class _ManagerRoomsScreenState extends State<ManagerRoomsScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                 ),
-                const SizedBox(width: 12),
                 ElevatedButton.icon(
                   onPressed: _showAddRoomSheet,
                   icon: const Icon(Icons.add_rounded, size: 18),

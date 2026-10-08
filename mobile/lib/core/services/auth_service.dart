@@ -84,6 +84,7 @@ class AuthService {
     await ApiClient.setSession(
       accessToken: authRes.accessToken,
       tenantId: authRes.tenantId,
+      userId: authRes.userId,
     );
     return authRes;
   }
@@ -142,7 +143,11 @@ class AuthService {
   static Future<AuthResponse> refresh(String refreshToken) async {
     final data = await ApiClient.post('/api/public/auth/refresh', body: {'refreshToken': refreshToken});
     final authRes = AuthResponse.fromJson(data as Map<String, dynamic>);
-    await ApiClient.setSession(accessToken: authRes.accessToken, tenantId: authRes.tenantId);
+    await ApiClient.setSession(
+      accessToken: authRes.accessToken,
+      tenantId: authRes.tenantId,
+      userId: authRes.userId,
+    );
     return authRes;
   }
 

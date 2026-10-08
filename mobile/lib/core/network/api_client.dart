@@ -23,6 +23,7 @@ class ApiClient {
   // Session state (giống authStore + tenantStore của Zustand)
   static String? _accessToken;
   static String? _tenantId;
+  static String? _userId;
 
   // ─── Session Management ────────────────────────────────
 
@@ -31,12 +32,15 @@ class ApiClient {
     final prefs = await SharedPreferences.getInstance();
     _accessToken = prefs.getString('access_token');
     _tenantId = prefs.getString('tenant_id');
+    _userId = prefs.getString('user_id');
+    _userId ??= _userIdFromToken(_accessToken);
   }
 
   /// Lưu session sau khi login thành công (giống authStore.login)
-  static Future<void> setSession({required String accessToken, String? tenantId}) async {
+  static Future<void> setSession({required String accessToken, String? tenantId, String? userId}) async {
     _accessToken = accessToken;
     _tenantId = tenantId;
+    _userId = userId;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('access_token', accessToken);
     if (tenantId != null) {
@@ -44,21 +48,53 @@ class ApiClient {
     } else {
       await prefs.remove('tenant_id');
     }
+    if (userId != null && userId.isNotEmpty) {
+      await prefs.setString('user_id', userId);
+    } else {
+      await prefs.remove('user_id');
+    }
   }
 
   /// Xóa session khi đăng xuất (giống authStore.logout)
   static Future<void> logout() async {
     _accessToken = null;
     _tenantId = null;
+    _userId = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('access_token');
     await prefs.remove('tenant_id');
+    await prefs.remove('user_id');
     await prefs.remove('user_role');
     await prefs.remove('user_fullname');
   }
 
   static String? get accessToken => _accessToken;
   static String? get tenantId => _tenantId;
+  static String? get userId => _userId ?? _userIdFromToken(_accessToken);
+
+  /// JWT `sub` is the user UUID — used when prefs do not have user_id yet.
+  static String? _userIdFromToken(String? token) {
+    if (token == null || token.isEmpty) return null;
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return null;
+      var payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+      switch (payload.length % 4) {
+        case 2:
+          payload += '==';
+          break;
+        case 3:
+          payload += '=';
+          break;
+      }
+      final decoded = jsonDecode(utf8.decode(base64.decode(payload)));
+      if (decoded is Map<String, dynamic>) {
+        final sub = decoded['sub'] ?? decoded['userId'];
+        if (sub != null && sub.toString().isNotEmpty) return sub.toString();
+      }
+    } catch (_) {}
+    return null;
+  }
 
   // ─── Request Interceptor (Headers) ────────────────────
 

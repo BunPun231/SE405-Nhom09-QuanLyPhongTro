@@ -27,16 +27,23 @@ class InvoiceDetail {
   });
 
   factory InvoiceDetail.fromJson(Map<String, dynamic> json) {
+    final name = (json['serviceName'] ?? json['description'] ?? '').toString();
+    final cost = (json['totalCost'] ?? json['lineTotal'] ?? 0) as num;
+    final qty = (json['consumption'] ?? json['quantity']) as num?;
+    final uPrice = (json['unitPrice'] ?? json['basePrice'] ?? 0) as num;
+    final isMeter = name.toLowerCase().contains('điện') || name.toLowerCase().contains('nước');
+    final charge = (json['chargeType'] ?? (isMeter ? 'PER_INDEX' : 'FIXED')).toString();
+
     return InvoiceDetail(
       id: json['id'] ?? 0,
       serviceId: json['serviceId'] ?? 0,
-      serviceName: json['serviceName'] ?? '',
-      chargeType: json['chargeType'] ?? '',
+      serviceName: name,
+      chargeType: charge,
       oldReading: (json['oldReading'] as num?)?.toDouble(),
       newReading: (json['newReading'] as num?)?.toDouble(),
-      consumption: (json['consumption'] as num?)?.toDouble(),
-      unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0,
-      totalCost: (json['totalCost'] as num?)?.toDouble() ?? 0,
+      consumption: qty?.toDouble(),
+      unitPrice: uPrice.toDouble(),
+      totalCost: cost.toDouble(),
     );
   }
 }
@@ -53,7 +60,9 @@ class InvoiceResult {
   final double balanceDeduction;
   final String status; // PENDING | PARTIAL | PAID | VOID
   final String invoiceType;
+  final String? cancelReason;
   final String? dueDate;
+  final String? calculationSnapshot;
   final List<InvoiceDetail> details;
 
   InvoiceResult({
@@ -68,7 +77,9 @@ class InvoiceResult {
     required this.balanceDeduction,
     required this.status,
     required this.invoiceType,
+    this.cancelReason,
     this.dueDate,
+    this.calculationSnapshot,
     required this.details,
   });
 
@@ -85,11 +96,48 @@ class InvoiceResult {
       balanceDeduction: (json['balanceDeduction'] as num?)?.toDouble() ?? 0,
       status: json['status'] ?? 'PENDING',
       invoiceType: json['invoiceType'] ?? '',
+      cancelReason: json['cancelReason'],
       dueDate: json['dueDate'],
+      calculationSnapshot: json['calculationSnapshot'] is String
+          ? json['calculationSnapshot']
+          : json['calculationSnapshot']?.toString(),
       details: (json['details'] as List<dynamic>? ?? []).map((e) => InvoiceDetail.fromJson(e as Map<String, dynamic>)).toList(),
     );
   }
 }
+
+class InvoicePaymentInfoResult {
+  final String bankId;
+  final String bankAccount;
+  final String accountHolder;
+  final String bankName;
+  final double amount;
+  final String memo;
+  final String qrUrl;
+
+  InvoicePaymentInfoResult({
+    required this.bankId,
+    required this.bankAccount,
+    required this.accountHolder,
+    required this.bankName,
+    required this.amount,
+    required this.memo,
+    required this.qrUrl,
+  });
+
+  factory InvoicePaymentInfoResult.fromJson(Map<String, dynamic> json) {
+    return InvoicePaymentInfoResult(
+      bankId: json['bankId']?.toString() ?? '',
+      bankAccount: json['bankAccount']?.toString() ?? '',
+      accountHolder: json['accountHolder']?.toString() ?? '',
+      bankName: json['bankName']?.toString() ?? '',
+      amount: (json['amount'] as num?)?.toDouble() ?? 0,
+      memo: json['memo']?.toString() ?? '',
+      qrUrl: json['qrUrl']?.toString() ?? '',
+    );
+  }
+}
+
 
 class MeterReadingResult {
   final int id;
@@ -173,6 +221,12 @@ class InvoiceService {
   static Future<InvoiceResult> get(int invoiceId) async {
     final data = await ApiClient.get('/api/v1/invoices/$invoiceId');
     return InvoiceResult.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// UC78: Get VietQR payment info — GET /api/v1/invoices/{id}/payment-info
+  static Future<InvoicePaymentInfoResult> getPaymentInfo(int invoiceId) async {
+    final data = await ApiClient.get('/api/v1/invoices/$invoiceId/payment-info');
+    return InvoicePaymentInfoResult.fromJson(data as Map<String, dynamic>);
   }
 
   /// UC77: Void invoice — DELETE /api/v1/invoices/{id}

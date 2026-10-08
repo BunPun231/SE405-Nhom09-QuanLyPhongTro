@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/contract_service.dart';
 import '../../../core/services/invoice_service.dart';
+import '../../widgets/viet_qr_payment_sheet.dart';
+import '../../widgets/invoice_detail_sheet.dart';
 
 class TenantHomeScreen extends StatefulWidget {
   final Function(int) onNavigateTab;
 
-  const TenantHomeScreen({Key? key, required this.onNavigateTab}) : super(key: key);
+  const TenantHomeScreen({super.key, required this.onNavigateTab});
 
   @override
   State<TenantHomeScreen> createState() => _TenantHomeScreenState();
@@ -25,21 +27,31 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
 
   Future<void> _loadTenantDashboard() async {
     setState(() => _isLoading = true);
+    ContractResult? contract;
+    InvoiceResult? unpaidInvoice;
     try {
-      final contracts = await ContractService.listActive();
+      final contracts = await ContractService.listMine();
       if (contracts.isNotEmpty) {
-        _contract = contracts.first;
-      }
-
-      final invoices = await InvoiceService.listMine(status: 'UNPAID');
-      if (invoices.content.isNotEmpty) {
-        _unpaidInvoice = invoices.content.first;
+        contract = contracts.first;
       }
     } catch (e) {
-      print('Error loading tenant home data: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      print('Error loading tenant home contracts: $e');
     }
+    try {
+      final invoices = await InvoiceService.listMine();
+      for (final invoice in invoices.content) {
+        final s = invoice.status.toUpperCase();
+        if (s == 'PENDING' || s == 'PARTIAL' || s == 'UNPAID') {
+          unpaidInvoice = invoice;
+          break;
+        }
+      }
+    } catch (e) {
+      print('Error loading tenant home invoices: $e');
+    }
+    _contract = contract;
+    _unpaidInvoice = unpaidInvoice;
+    if (mounted) setState(() => _isLoading = false);
   }
 
   @override
@@ -124,7 +136,7 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text('Tiền nhà hàng tháng', style: TextStyle(color: Color(0xB3FFFFFF), fontSize: 11)),
-                                Text('${rentStr}đ', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                                Text('$rentStrđ', style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                               ],
                             ),
                             ElevatedButton.icon(
@@ -200,25 +212,54 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                '${invoiceAmountStr}đ',
+                                '$invoiceAmountStrđ',
                                 style: const TextStyle(color: AppColors.primary, fontSize: 16, fontWeight: FontWeight.w900),
                               ),
                             ],
                           ),
                           const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              onPressed: () => _showVietQRDialog(context, _unpaidInvoice!),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          Row(
+                            children: [
+                              OutlinedButton.icon(
+                                onPressed: () {
+                                  InvoiceDetailSheet.show(
+                                    context,
+                                    invoiceId: _unpaidInvoice!.id,
+                                    initialInvoice: _unpaidInvoice,
+                                    onPaymentSuccess: _loadTenantDashboard,
+                                  );
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.primary,
+                                  side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                icon: const Icon(Icons.visibility_outlined, size: 16),
+                                label: const Text('Chi tiết', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                               ),
-                              icon: const Icon(Icons.qr_code_2_rounded, size: 20),
-                              label: const Text('Thanh Toán Qua VietQR Ngay', style: TextStyle(fontWeight: FontWeight.bold)),
-                            ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    VietQrPaymentSheet.show(
+                                      context,
+                                      invoiceId: _unpaidInvoice!.id,
+                                      onSuccess: _loadTenantDashboard,
+                                    );
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF059669),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(vertical: 11),
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                  icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+                                  label: const Text('Thanh Toán VietQR ➜', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -250,19 +291,29 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
                     children: [
                       Expanded(
                         child: _QuickCard(
+                          icon: Icons.bolt_rounded,
+                          title: 'Ghi Điện Nước',
+                          subtitle: 'Báo số tháng này',
+                          color: Colors.blue,
+                          onTap: () => widget.onNavigateTab(4),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _QuickCard(
                           icon: Icons.build_rounded,
                           title: 'Báo Sự Cố',
-                          subtitle: 'Sửa vòi nước, bóng đèn',
+                          subtitle: 'Sửa chữa hỏng hóc',
                           color: AppColors.warning,
                           onTap: () => widget.onNavigateTab(2),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: _QuickCard(
                           icon: Icons.history_edu_rounded,
-                          title: 'Lịch Sử Hóa Đơn',
-                          subtitle: 'Xem hóa đơn cũ',
+                          title: 'Hóa Đơn',
+                          subtitle: 'Xem & thanh toán',
                           color: AppColors.success,
                           onTap: () => widget.onNavigateTab(1),
                         ),
@@ -272,60 +323,6 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
                 ],
               ),
             ),
-    );
-  }
-
-  void _showVietQRDialog(BuildContext context, InvoiceResult invoice) {
-    final amountStr = invoice.totalAmount.toStringAsFixed(0);
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 16),
-            const Text('Mã VietQR Thanh Toán Tự Động', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            const Text('Quét mã bằng ứng dụng Ngân hàng (MB, Vietcombank, Techcombank...)', style: TextStyle(fontSize: 12, color: Colors.grey), textAlign: TextAlign.center),
-            const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.primary, width: 2),
-                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
-              ),
-              child: Image.network(
-                'https://img.vietqr.io/image/MB-99998888222-compact2.png?amount=$amountStr&addInfo=HOADON%20${invoice.id}&accountName=CHU%20TRO',
-                height: 220,
-                errorBuilder: (context, error, stackTrace) => Column(
-                  children: [
-                    const Icon(Icons.qr_code_scanner_rounded, size: 80, color: AppColors.primary),
-                    const SizedBox(height: 8),
-                    Text('STK: MB Bank 99998888222\nSố tiền: ${amountStr}đ\nNội dung: HOADON ${invoice.id}', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                minimumSize: const Size(double.infinity, 48),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-              child: const Text('Đã Chuyển Khoản / Đóng', style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

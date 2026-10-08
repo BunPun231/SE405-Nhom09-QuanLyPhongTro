@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_colors.dart';
@@ -35,6 +37,7 @@ class _LoginScreenState extends State<LoginScreen> {
       case 'OWNER':
         return UserRole.manager;
       case 'TENANT':
+      case 'RESIDENT':
         return UserRole.tenant;
       case 'TECHNICIAN':
       case 'STAFF':
@@ -73,10 +76,27 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted && widget.onLoginSuccess != null) {
         widget.onLoginSuccess!(role, authRes.fullName);
       }
-    } catch (e) {
+    } on SocketException {
       if (mounted) {
         setState(() {
-          _errorMessage = e.toString().replaceFirst('Exception: ', '');
+          _errorMessage = 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra backend đang chạy.';
+        });
+      }
+    } on TimeoutException {
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Kết nối quá thời gian. Vui lòng thử lại.';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        final raw = e.toString().replaceFirst('Exception: ', '');
+        setState(() {
+          _errorMessage = raw.contains('SocketException') || raw.contains('Connection refused')
+              ? 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra backend đang chạy.'
+              : raw.contains('unmounted') || raw.contains('defunct')
+                  ? 'Đã xảy ra lỗi. Vui lòng thử lại.'
+                  : raw;
         });
       }
     } finally {

@@ -77,6 +77,55 @@ class _ManagerServicesScreenState extends State<ManagerServicesScreen> {
       ),
       body: Column(
         children: [
+          // Motel Selector bar
+          if (_motels.isNotEmpty)
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _motels.map((motel) {
+                    final isSelected = motel.id == _selectedMotel?.id;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: GestureDetector(
+                        onTap: () {
+                          if (!isSelected) _loadServicesForMotel(motel);
+                        },
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.apartment_rounded,
+                                size: 14,
+                                color: isSelected ? Colors.white : const Color(0xFF64748B),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                motel.name,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                  color: isSelected ? Colors.white : const Color(0xFF334155),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
 
           Expanded(
             child: RefreshIndicator(
@@ -474,10 +523,25 @@ class _ManagerServicesScreenState extends State<ManagerServicesScreen> {
                       children: [
                         const Icon(Icons.design_services_rounded, color: AppColors.primary, size: 24),
                         const SizedBox(width: 10),
-                        Text(editing != null ? 'Cập Nhật Dịch Vụ' : 'Thêm Dịch Vụ Mới', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                editing != null ? 'Cập Nhật Dịch Vụ' : 'Thêm Dịch Vụ Mới',
+                                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                              ),
+                              if (_selectedMotel != null)
+                                Text(
+                                  'Khu: ${_selectedMotel!.name}',
+                                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight),
+                                ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 16),
 
                     // Quick suggestions for Electric/Water
                     const Text('Gợi ý dịch vụ nhanh:', style: TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),

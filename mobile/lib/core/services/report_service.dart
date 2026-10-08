@@ -154,46 +154,27 @@ class AuditLogResult {
 class ReportService {
   /// UC94: Dashboard summary — GET /api/v1/reports/dashboard-summary
   static Future<DashboardSummaryResult?> getDashboardSummary() async {
-    try {
-      final data = await ApiClient.get('/api/v1/reports/dashboard-summary');
-      return DashboardSummaryResult.fromJson(data as Map<String, dynamic>);
-    } catch (e) {
-      print('Failed to get dashboard summary: $e');
-      return null;
-    }
+    final data = await ApiClient.get('/api/v1/reports/dashboard-summary');
+    if (data == null) return null;
+    return DashboardSummaryResult.fromJson(data as Map<String, dynamic>);
   }
 
   /// UC90: Revenue report — GET /api/v1/reports/revenue
   static Future<Map<String, dynamic>?> getRevenue(int motelId, int year) async {
-    try {
-      final data = await ApiClient.get('/api/v1/reports/revenue', params: {'motelId': motelId, 'year': year});
-      return data as Map<String, dynamic>;
-    } catch (e) {
-      print('Failed to get revenue report: $e');
-      return null;
-    }
+    final data = await ApiClient.get('/api/v1/reports/revenue', params: {'motelId': motelId, 'year': year});
+    return data as Map<String, dynamic>?;
   }
 
   /// UC91: Occupancy report — GET /api/v1/reports/occupancy
   static Future<Map<String, dynamic>?> getOccupancy(int motelId) async {
-    try {
-      final data = await ApiClient.get('/api/v1/reports/occupancy', params: {'motelId': motelId});
-      return data as Map<String, dynamic>;
-    } catch (e) {
-      print('Failed to get occupancy report: $e');
-      return null;
-    }
+    final data = await ApiClient.get('/api/v1/reports/occupancy', params: {'motelId': motelId});
+    return data as Map<String, dynamic>?;
   }
 
   /// UC92: Debt report — GET /api/v1/reports/debt
   static Future<Map<String, dynamic>?> getDebt(int motelId, {String sort = 'days'}) async {
-    try {
-      final data = await ApiClient.get('/api/v1/reports/debt', params: {'motelId': motelId, 'sort': sort});
-      return data as Map<String, dynamic>;
-    } catch (e) {
-      print('Failed to get debt report: $e');
-      return null;
-    }
+    final data = await ApiClient.get('/api/v1/reports/debt', params: {'motelId': motelId, 'sort': sort});
+    return data as Map<String, dynamic>?;
   }
 }
 

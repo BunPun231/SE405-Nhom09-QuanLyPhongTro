@@ -22,7 +22,7 @@ class _TenantContractScreenState extends State<TenantContractScreen> {
   Future<void> _loadActiveContracts() async {
     setState(() => _isLoading = true);
     try {
-      final res = await ContractService.listActive();
+      final res = await ContractService.listMine();
       if (mounted) {
         setState(() {
           _contracts = res;

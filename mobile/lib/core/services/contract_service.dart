@@ -228,10 +228,24 @@ class ContractService {
     return PageResponse(content: [], totalElements: 0, totalPages: 0, size: size, number: page);
   }
 
-  /// List active contracts — GET /api/contracts/active
+  /// List active contracts — GET /api/contracts/active (MANAGER/ADMIN)
   static Future<List<ContractResult>> listActive() async {
     final data = await ApiClient.get('/api/contracts/active');
     return (data as List<dynamic>).map((e) => ContractResult.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  /// List contracts of the current resident — GET /api/contracts/resident/{userId}
+  static Future<List<ContractResult>> listMine({bool activeOnly = true}) async {
+    final userId = ApiClient.userId;
+    if (userId == null || userId.isEmpty) {
+      throw Exception('Missing user session');
+    }
+    final data = await ApiClient.get('/api/contracts/resident/$userId');
+    final contracts = (data as List<dynamic>)
+        .map((e) => ContractResult.fromJson(e as Map<String, dynamic>))
+        .toList();
+    if (!activeOnly) return contracts;
+    return contracts.where((c) => c.status.toUpperCase() == 'ACTIVE').toList();
   }
 
   /// Get contract summary by ID — GET /api/contracts/{id}

@@ -50,6 +50,7 @@ class _AppRouterState extends State<AppRouter> {
       case 'OWNER':
         return UserRole.manager;
       case 'TENANT':
+      case 'RESIDENT':
         return UserRole.tenant;
       case 'TECHNICIAN':
       case 'STAFF':
