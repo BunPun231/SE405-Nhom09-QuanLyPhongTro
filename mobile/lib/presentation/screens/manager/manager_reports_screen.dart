@@ -33,20 +33,39 @@ class _ManagerReportsScreenState extends State<ManagerReportsScreen> {
   }
 
   Future<void> _loadMotels() async {
+    setState(() { _isLoading = true; _error = null; });
     try {
       final res = await MotelService.list(size: 50);
       if (mounted) {
         setState(() {
           _motels = res.content;
-          if (res.content.isNotEmpty) _selectedMotelId = res.content.first.id;
+          if (res.content.isNotEmpty) {
+            _selectedMotelId = res.content.first.id;
+          } else {
+            _isLoading = false;
+          }
         });
-        _fetchData();
+        if (res.content.isNotEmpty) {
+          _fetchData();
+        }
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _error = e.toString().replaceFirst('Exception: ', '');
+        });
+      }
+    }
   }
 
   Future<void> _fetchData() async {
-    if (_selectedMotelId == null) return;
+    if (_selectedMotelId == null) {
+      if (_motels.isEmpty) {
+        await _loadMotels();
+      }
+      return;
+    }
     setState(() { _isLoading = true; _error = null; });
     try {
       if (_tab == _ReportTab.revenue) {
@@ -58,7 +77,7 @@ class _ManagerReportsScreenState extends State<ManagerReportsScreen> {
       }
       if (mounted) setState(() => _isLoading = false);
     } catch (e) {
-      if (mounted) setState(() { _isLoading = false; _error = e.toString(); });
+      if (mounted) setState(() { _isLoading = false; _error = e.toString().replaceFirst('Exception: ', ''); });
     }
   }
 
@@ -81,10 +100,14 @@ class _ManagerReportsScreenState extends State<ManagerReportsScreen> {
                 onChanged: (v) { setState(() => _selectedMotelId = v); _fetchData(); },
               )),
               if (_motels.isNotEmpty && _tab == _ReportTab.revenue) const SizedBox(width: 8),
-              if (_tab == _ReportTab.revenue) _dropFilter<int>(
-                value: _year,
-                items: [2024, 2025, 2026, 2027].map((y) => DropdownMenuItem(value: y, child: Text('Năm $y', style: const TextStyle(fontSize: 12)))).toList(),
-                onChanged: (v) { if (v != null) { setState(() => _year = v); _fetchData(); } },
+              if (_tab == _ReportTab.revenue) SizedBox(
+                width: 110,
+                child: _dropFilter<int>(
+                  value: _year,
+                  isExpanded: true,
+                  items: [2024, 2025, 2026, 2027].map((y) => DropdownMenuItem(value: y, child: Text('Năm $y', style: const TextStyle(fontSize: 12)))).toList(),
+                  onChanged: (v) { if (v != null) { setState(() => _year = v); _fetchData(); } },
+                ),
               ),
             ]),
             const SizedBox(height: 10),
@@ -114,16 +137,31 @@ class _ManagerReportsScreenState extends State<ManagerReportsScreen> {
     );
   }
 
-  Widget _dropFilter<T>({required T value, required List<DropdownMenuItem<T>> items, required void Function(T?) onChanged}) => Container(
+  Widget _dropFilter<T>({
+    required T value,
+    required List<DropdownMenuItem<T>> items,
+    required void Function(T?) onChanged,
+    bool isExpanded = true,
+  }) => Container(
     height: 38,
-    decoration: BoxDecoration(border: Border.all(color: const Color(0xFFE2E8F0)), borderRadius: BorderRadius.circular(10), color: Colors.white),
-    child: DropdownButtonHideUnderline(child: DropdownButton<T>(
-      isExpanded: true, value: value,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
+    padding: const EdgeInsets.symmetric(horizontal: 10),
+    decoration: BoxDecoration(
+      border: Border.all(color: const Color(0xFFE2E8F0)),
       borderRadius: BorderRadius.circular(10),
-      style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)),
-      items: items, onChanged: onChanged,
-    )),
+      color: Colors.white,
+    ),
+    child: DropdownButtonHideUnderline(
+      child: DropdownButton<T>(
+        isExpanded: isExpanded,
+        isDense: true,
+        padding: EdgeInsets.zero,
+        value: value,
+        borderRadius: BorderRadius.circular(10),
+        style: const TextStyle(fontSize: 12, color: Color(0xFF1E293B)),
+        items: items,
+        onChanged: onChanged,
+      ),
+    ),
   );
 
   Widget _tabBtn(_ReportTab tab, IconData icon, String label) {
@@ -156,6 +194,9 @@ class _ManagerReportsScreenState extends State<ManagerReportsScreen> {
   ]));
 
   Widget _buildContent() {
+    if (_motels.isEmpty) {
+      return _buildNoData('Bạn chưa có khu nhà trọ nào.\nVui lòng thêm nhà trọ trước khi xem thống kê.');
+    }
     switch (_tab) {
       case _ReportTab.revenue: return _buildRevenue();
       case _ReportTab.occupancy: return _buildOccupancy();
@@ -224,13 +265,19 @@ class _ManagerReportsScreenState extends State<ManagerReportsScreen> {
                     Row(children: [
                       Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(3), child: LinearProgressIndicator(value: projRatio, minHeight: 6, backgroundColor: const Color(0xFFF1F5F9), valueColor: const AlwaysStoppedAnimation(Color(0xFFA78BFA))))),
                       const SizedBox(width: 8),
-                      SizedBox(width: 70, child: Text('${_fmt(projected)}đ', style: const TextStyle(fontSize: 9, color: AppColors.textSecondaryLight), textAlign: TextAlign.right)),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 50, maxWidth: 85),
+                        child: Text('${_fmt(projected)}đ', style: const TextStyle(fontSize: 9, color: AppColors.textSecondaryLight), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
                     ]),
                     const SizedBox(height: 4),
                     Row(children: [
                       Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(3), child: LinearProgressIndicator(value: actualRatio, minHeight: 6, backgroundColor: const Color(0xFFF1F5F9), valueColor: const AlwaysStoppedAnimation(AppColors.success)))),
                       const SizedBox(width: 8),
-                      SizedBox(width: 70, child: Text('${_fmt(actual)}đ', style: const TextStyle(fontSize: 9, color: AppColors.success, fontWeight: FontWeight.w600), textAlign: TextAlign.right)),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(minWidth: 50, maxWidth: 85),
+                        child: Text('${_fmt(actual)}đ', style: const TextStyle(fontSize: 9, color: AppColors.success, fontWeight: FontWeight.w600), textAlign: TextAlign.right, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
                     ]),
                   ])),
                 ]),
@@ -387,7 +434,7 @@ class _ManagerReportsScreenState extends State<ManagerReportsScreen> {
             ]),
           )),
           const SizedBox(width: 10),
-          Expanded(child: _summaryCard('Số hóa đơn nợ', '$debtorCount HĐ', const Color(0xFF1E293B), icon: Icons.receipt_outlined)),
+          _summaryCard('Số hóa đơn nợ', '$debtorCount HĐ', const Color(0xFF1E293B), icon: Icons.receipt_outlined),
         ]),
         const SizedBox(height: 20),
         const Text('Chi tiết công nợ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E293B))),
