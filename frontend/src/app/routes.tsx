@@ -17,6 +17,9 @@ import { SettingsPage } from "@/features/settings/pages/SettingsPage";
 import { NotificationListPage } from "@/features/notifications/pages/NotificationListPage";
 import { SuperAdminDashboardPage } from "@/features/admin/pages/SuperAdminDashboardPage";
 import { ManagerListPage } from "@/features/admin/pages/ManagerListPage";
+import { DeviceListPage } from "@/features/devices/pages/DeviceListPage";
+import { TechnicianListPage } from "@/features/technicians/pages/TechnicianListPage";
+import { MaintenancePage } from "@/features/maintenance/pages/MaintenancePage";
 
 export const router = createBrowserRouter([
   {
@@ -68,6 +71,18 @@ export const router = createBrowserRouter([
       {
         path: "motels",
         element: <MotelListPage />
+      },
+      {
+        path: "devices",
+        element: <DeviceListPage />
+      },
+      {
+        path: "technicians",
+        element: <TechnicianListPage />
+      },
+      {
+        path: "maintenance",
+        element: <MaintenancePage />
       },
       {
         path: "services",

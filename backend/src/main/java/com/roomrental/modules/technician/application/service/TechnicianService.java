@@ -5,6 +5,7 @@ import com.roomrental.common.exception.BaseException;
 import com.roomrental.common.util.SecurityUtils;
 import com.roomrental.modules.auth.infrastructure.entity.UserEntity;
 import com.roomrental.modules.auth.infrastructure.repository.UserJpaRepository;
+import com.roomrental.modules.motel.domain.repository.MotelRepository;
 import com.roomrental.modules.technician.application.dto.TechnicianCreateCommand;
 import com.roomrental.modules.technician.application.dto.TechnicianResult;
 import com.roomrental.modules.technician.application.event.TechnicianCreatedEvent;
@@ -31,17 +32,20 @@ public class TechnicianService {
 
     private final UserJpaRepository userJpaRepository;
     private final TechnicianProfileJpaRepository profileRepository;
+    private final MotelRepository motelRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
 
     public TechnicianService(
             UserJpaRepository userJpaRepository,
             TechnicianProfileJpaRepository profileRepository,
+            MotelRepository motelRepository,
             PasswordEncoder passwordEncoder,
             ApplicationEventPublisher eventPublisher
     ) {
         this.userJpaRepository = userJpaRepository;
         this.profileRepository = profileRepository;
+        this.motelRepository = motelRepository;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
     }
@@ -56,6 +60,14 @@ public class TechnicianService {
 
         if (userJpaRepository.existsByPhone(command.phone())) {
             throw new BaseException(HttpStatus.CONFLICT, "PHONE_EXISTS", "Phone already registered");
+        }
+
+        // Validate assigned motel IDs belong to current tenant
+        if (command.assignedMotelIds() != null && !command.assignedMotelIds().isEmpty()) {
+            for (Integer motelId : command.assignedMotelIds()) {
+                motelRepository.findByIdAndTenantId(motelId.longValue(), tenantId)
+                        .orElseThrow(() -> BaseException.badRequest("Khu trọ với ID " + motelId + " không tồn tại hoặc không thuộc quyền quản lý"));
+            }
         }
 
         UserEntity user = new UserEntity();

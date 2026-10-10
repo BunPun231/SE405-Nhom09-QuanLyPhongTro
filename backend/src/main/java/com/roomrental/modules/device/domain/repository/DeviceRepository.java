@@ -8,6 +8,7 @@ import java.util.Optional;
 
 public interface DeviceRepository {
     Device save(Device device);
+    Optional<Device> findById(Long id);
     Optional<Device> findByIdAndMotelId(Long id, Long motelId);
     Page<Device> findByMotelId(Long motelId, Pageable pageable);
 }

@@ -74,7 +74,8 @@ Dự án cung cấp 2 chế độ chạy môi trường Local tùy thuộc vào 
 Bạn không cần cài đặt Java hay Node.js. Chỉ cần Docker:
 
 ```bash
-docker compose -f docker-compose.local.yml up -d
+docker compose -f docker-compose.local.yml up -d (chạy be local)
+docker compose up --build -d (chạy proj theo env)
 ```
 Lệnh này sẽ khởi động toàn bộ: **Postgres (port 15432), Redis (port 16379), Backend (port 8080), Frontend (port 5173)**.
 - Khi bạn sửa code trong `frontend/` hoặc `backend/`, container sẽ tự động **Hot Reload**.

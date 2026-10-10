@@ -25,6 +25,11 @@ public class DeviceRepositoryAdapter implements DeviceRepository {
     public Device save(Device device) { return mapper.toDomain(jpa.save(mapper.toEntity(device))); }
 
     @Override
+    public Optional<Device> findById(Long id) {
+        return jpa.findById(id).map(mapper::toDomain);
+    }
+
+    @Override
     public Optional<Device> findByIdAndMotelId(Long id, Long motelId) {
         return jpa.findByIdAndMotelId(id, motelId).map(mapper::toDomain);
     }

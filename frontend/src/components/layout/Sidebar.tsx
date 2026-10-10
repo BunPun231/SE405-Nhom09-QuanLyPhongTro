@@ -11,7 +11,10 @@ import {
   Gauge, 
   BarChart3,
   LogOut,
-  Layers
+  Layers,
+  Wrench,
+  UserCog,
+  Hammer
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useWorkspaceStore } from "@/store/workspaceStore";
@@ -19,6 +22,9 @@ import { useWorkspaceStore } from "@/store/workspaceStore";
 const NAV_ITEMS = [
   { key: "dashboard", name: "Tổng quan", path: "/dashboard", icon: LayoutDashboard },
   { key: "motels", name: "Khu trọ & Phòng", path: "/motels", icon: Building2 },
+  { key: "devices", name: "Kho thiết bị", path: "/devices", icon: Wrench },
+  { key: "technicians", name: "Kỹ thuật viên", path: "/technicians", icon: UserCog },
+  { key: "maintenance", name: "Bảo trì & Sự cố", path: "/maintenance", icon: Hammer },
   { key: "services", name: "Dịch vụ", path: "/services", icon: Settings },
   { key: "residents", name: "Khách thuê", path: "/residents", icon: Users },
   { key: "contracts", name: "Hợp đồng & Cọc", path: "/contracts", icon: FileText },
@@ -35,6 +41,7 @@ export function Sidebar() {
   const { modules, fetchConfig } = useWorkspaceStore();
 
   const isTenant = (user?.role as string) === "TENANT" || (user?.role as string) === "RESIDENT";
+  const isTechnician = (user?.role as string) === "TECHNICIAN";
   const isManager = (user?.role as string) === "MANAGER";
 
   useEffect(() => {
@@ -43,15 +50,15 @@ export function Sidebar() {
     }
   }, [isManager]);
 
-  // Filter NAV_ITEMS based on role and workspace customization (UC17)
   const filteredItems = NAV_ITEMS.filter((item) => {
     if (isTenant) {
-      return ["/dashboard", "/invoices", "/settings", "/meter"].includes(item.path);
+      return ["/dashboard", "/invoices", "/settings", "/meter", "/maintenance"].includes(item.path);
+    }
+    if (isTechnician) {
+      return ["/maintenance", "/settings"].includes(item.path);
     }
     if (isManager) {
-      // Always show Dashboard and Settings
-      if (item.key === "dashboard" || item.key === "settings") return true;
-      // Respect workspace module configuration (UC17)
+      if (item.key === "dashboard" || item.key === "settings" || item.key === "devices" || item.key === "technicians" || item.key === "maintenance") return true;
       return modules[item.key] !== false;
     }
     return true;
@@ -61,6 +68,12 @@ export function Sidebar() {
     }
     if (isTenant && item.path === "/meter") {
       return { ...item, name: "Ghi chỉ số điện nước" };
+    }
+    if (isTenant && item.path === "/maintenance") {
+      return { ...item, name: "Báo sự cố bảo trì" };
+    }
+    if (isTechnician && item.path === "/maintenance") {
+      return { ...item, name: "Nhiệm vụ bảo trì" };
     }
     return item;
   });
@@ -72,6 +85,7 @@ export function Sidebar() {
       case "MANAGER":
         return "Quản lý";
       case "TENANT":
+      case "RESIDENT":
         return "Khách thuê";
       case "TECHNICIAN":
         return "Kỹ thuật viên";
