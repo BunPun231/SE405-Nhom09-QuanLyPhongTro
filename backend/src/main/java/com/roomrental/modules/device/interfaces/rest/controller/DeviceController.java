@@ -34,7 +34,7 @@ public class DeviceController {
     public ResponseEntity<ApiResponse<DeviceResult>> create(
             @PathVariable Long motelId, @Valid @RequestBody DeviceCreateRequest body) {
         DeviceResult result = deviceService.create(motelId, new DeviceCreateCommand(
-                body.name(), body.brand(), body.purchasePrice(), body.purchaseDate()));
+                body.name(), body.brand(), body.purchasePrice(), body.purchaseDate(), body.totalQuantity()));
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(result, "Device created"));
     }
 
@@ -61,7 +61,7 @@ public class DeviceController {
             @PathVariable Long motelId, @PathVariable Long deviceId,
             @RequestBody DeviceUpdateRequest body) {
         DeviceResult result = deviceService.update(motelId, deviceId, new DeviceUpdateCommand(
-                body.name(), body.brand(), body.purchasePrice(), body.purchaseDate(), body.status()));
+                body.name(), body.brand(), body.purchasePrice(), body.purchaseDate(), body.status(), body.totalQuantity()));
         return ResponseEntity.ok(ApiResponse.ok(result, "Device updated"));
     }
 

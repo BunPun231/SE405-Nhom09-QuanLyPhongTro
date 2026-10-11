@@ -383,6 +383,19 @@ export function MaintenancePage() {
                 </select>
               </div>
               <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Mức độ ưu tiên</label>
+                <select
+                  value={priorityInput}
+                  onChange={(e) => setPriorityInput(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                >
+                  <option value="LOW">Thấp (Low)</option>
+                  <option value="MEDIUM">Trung bình (Medium)</option>
+                  <option value="HIGH">Cao (High)</option>
+                  <option value="URGENT">Khẩn cấp (Urgent)</option>
+                </select>
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Mô tả chi tiết sự cố *</label>
                 <textarea
                   required

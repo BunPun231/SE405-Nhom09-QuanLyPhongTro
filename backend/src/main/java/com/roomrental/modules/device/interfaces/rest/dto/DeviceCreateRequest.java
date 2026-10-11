@@ -1,5 +1,6 @@
 package com.roomrental.modules.device.interfaces.rest.dto;
 
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -9,6 +10,9 @@ public record DeviceCreateRequest(
         String name,
         String brand,
         BigDecimal purchasePrice,
-        LocalDate purchaseDate
+        LocalDate purchaseDate,
+        @Min(value = 1, message = "Total quantity must be at least 1")
+        Integer totalQuantity
 ) {
 }
+

@@ -5,7 +5,9 @@ import java.time.LocalDate;
 
 public record DeviceResult(
         Long id, Long motelId, String name, String brand,
-        BigDecimal purchasePrice, LocalDate purchaseDate, String status,
-        Integer inUseQuantity
+        BigDecimal purchasePrice, LocalDate purchaseDate,
+        Integer totalQuantity, Integer inUseQuantity, Integer availableQuantity,
+        String status
 ) {
 }
+

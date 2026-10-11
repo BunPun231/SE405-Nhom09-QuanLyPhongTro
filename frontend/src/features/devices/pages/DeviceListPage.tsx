@@ -22,7 +22,7 @@ export function DeviceListPage() {
   const [formName, setFormName] = useState("");
   const [formBrand, setFormBrand] = useState("");
   const [formPrice, setFormPrice] = useState("");
-  const [formStatus, setFormStatus] = useState("IN_STOCK");
+  const [formTotalQuantity, setFormTotalQuantity] = useState("1");
 
   // Assign form states
   const [assignRoomId, setAssignRoomId] = useState("");
@@ -72,12 +72,13 @@ export function DeviceListPage() {
         name: formName,
         brand: formBrand,
         purchasePrice: formPrice ? Number(formPrice) : undefined,
+        totalQuantity: formTotalQuantity ? Number(formTotalQuantity) : 1,
       });
       setIsAddOpen(false);
       resetForm();
       loadDevices(selectedMotelId);
-    } catch (error) {
-      alert("Tạo thiết bị thất bại");
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Tạo thiết bị thất bại");
     }
   };
 
@@ -89,13 +90,13 @@ export function DeviceListPage() {
         name: formName,
         brand: formBrand,
         purchasePrice: formPrice ? Number(formPrice) : undefined,
-        status: formStatus,
+        totalQuantity: formTotalQuantity ? Number(formTotalQuantity) : undefined,
       });
       setIsEditOpen(false);
       resetForm();
       loadDevices(selectedMotelId);
-    } catch (error) {
-      alert("Cập nhật thất bại");
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Cập nhật thất bại");
     }
   };
 
@@ -104,8 +105,8 @@ export function DeviceListPage() {
     try {
       await deviceService.deleteDevice(selectedMotelId, deviceId);
       loadDevices(selectedMotelId);
-    } catch (error) {
-      alert("Xóa thất bại");
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Xóa thất bại");
     }
   };
 
@@ -122,8 +123,8 @@ export function DeviceListPage() {
       setIsAssignOpen(false);
       loadDevices(selectedMotelId);
       alert("Gán thiết bị thành công!");
-    } catch (error) {
-      alert("Gán thiết bị thất bại");
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Gán thiết bị thất bại");
     }
   };
 
@@ -143,7 +144,7 @@ export function DeviceListPage() {
     setFormName("");
     setFormBrand("");
     setFormPrice("");
-    setFormStatus("IN_STOCK");
+    setFormTotalQuantity("1");
     setActiveDevice(null);
   };
 
@@ -152,7 +153,7 @@ export function DeviceListPage() {
     setFormName(device.name);
     setFormBrand(device.brand || "");
     setFormPrice(device.purchasePrice ? String(device.purchasePrice) : "");
-    setFormStatus(device.status);
+    setFormTotalQuantity(device.totalQuantity ? String(device.totalQuantity) : "1");
     setIsEditOpen(true);
   };
 
@@ -166,27 +167,19 @@ export function DeviceListPage() {
   };
 
   const statusBadge = (device: DeviceResponse) => {
-    const inUse = device.inUseQuantity || 0;
-    switch (device.status) {
-      case "IN_STOCK":
-        return (
-          <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
-            Trong kho {inUse > 0 ? `(Đang gán: ${inUse})` : "(Sẵn sàng)"}
-          </span>
-        );
-      case "IN_USE":
-        return (
-          <span className="inline-flex rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
-            Đang sử dụng (Đang gán: {inUse})
-          </span>
-        );
-      case "BROKEN":
-        return <span className="inline-flex rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-800">Hỏng</span>;
-      case "REPAIRING":
-        return <span className="inline-flex rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Đang sửa chữa</span>;
-      default:
-        return <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-800">{device.status}</span>;
+    const avail = device.availableQuantity ?? 0;
+    if (avail > 0) {
+      return (
+        <span className="inline-flex rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+          IN_STOCK (Còn kho: {avail})
+        </span>
+      );
     }
+    return (
+      <span className="inline-flex rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-800">
+        IN_USE (Hết tồn kho)
+      </span>
+    );
   };
 
   return (
@@ -195,9 +188,9 @@ export function DeviceListPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <Wrench className="h-7 w-7 text-indigo-600" />
-            Quản lý Kho Thiết bị
+            Quản lý Kho Thiết bị (Inventory Batch)
           </h1>
-          <p className="text-sm text-slate-500 mt-1">Danh mục tài sản, đồ dùng đang trang bị tại các khu trọ</p>
+          <p className="text-sm text-slate-500 mt-1">Quản lý tổng tồn kho, số lượng đang gán tại các phòng và khả dụng xuất kho</p>
         </div>
 
         <div className="flex items-center gap-3">
@@ -221,7 +214,7 @@ export function DeviceListPage() {
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-indigo-700 transition"
           >
             <Plus className="h-4 w-4" />
-            Thêm thiết bị
+            Thêm thiết bị mới
           </button>
         </div>
       </div>
@@ -235,18 +228,21 @@ export function DeviceListPage() {
                 <th className="px-6 py-3">Tên thiết bị</th>
                 <th className="px-6 py-3">Thương hiệu</th>
                 <th className="px-6 py-3">Giá mua (VND)</th>
-                <th className="px-6 py-3">Tình trạng & SL gán</th>
+                <th className="px-6 py-3 text-center">Tổng SL</th>
+                <th className="px-6 py-3 text-center">Đang gán</th>
+                <th className="px-6 py-3 text-center">Khả dụng</th>
+                <th className="px-6 py-3">Trạng thái kho</th>
                 <th className="px-6 py-3 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-slate-400">Đang tải danh sách...</td>
+                  <td colSpan={8} className="px-6 py-8 text-center text-slate-400">Đang tải danh sách...</td>
                 </tr>
               ) : devices.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-slate-400">Chưa có thiết bị nào trong kho</td>
+                  <td colSpan={8} className="px-6 py-8 text-center text-slate-400">Chưa có thiết bị nào trong kho</td>
                 </tr>
               ) : (
                 devices.map((device) => (
@@ -256,6 +252,9 @@ export function DeviceListPage() {
                     <td className="px-6 py-4 text-slate-600 font-medium">
                       {device.purchasePrice ? device.purchasePrice.toLocaleString("vi-VN") : "—"}
                     </td>
+                    <td className="px-6 py-4 text-center font-bold text-slate-900">{device.totalQuantity ?? 1}</td>
+                    <td className="px-6 py-4 text-center font-semibold text-indigo-600">{device.inUseQuantity ?? 0}</td>
+                    <td className="px-6 py-4 text-center font-bold text-emerald-600">{device.availableQuantity ?? 0}</td>
                     <td className="px-6 py-4">{statusBadge(device)}</td>
                     <td className="px-6 py-4 text-right space-x-2">
                       <button
@@ -297,7 +296,7 @@ export function DeviceListPage() {
       {isAddOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-bold text-slate-900 mb-4">Thêm Thiết bị mới</h2>
+            <h2 className="text-lg font-bold text-slate-900 mb-4">Nhập Kho Thiết bị Mới</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Tên thiết bị *</label>
@@ -321,13 +320,24 @@ export function DeviceListPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Giá mua (VND)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Giá mua / Đơn giá (VND)</label>
                 <input
                   type="number"
                   value={formPrice}
                   onChange={(e) => setFormPrice(e.target.value)}
                   placeholder="0"
                   className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Tổng số lượng nhập kho *</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={formTotalQuantity}
+                  onChange={(e) => setFormTotalQuantity(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none font-bold text-indigo-600"
                 />
               </div>
               <div className="flex justify-end gap-3 pt-4">
@@ -342,7 +352,7 @@ export function DeviceListPage() {
                   type="submit"
                   className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
                 >
-                  Tạo mới
+                  Nhập kho
                 </button>
               </div>
             </form>
@@ -354,7 +364,7 @@ export function DeviceListPage() {
       {isEditOpen && activeDevice && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-bold text-slate-900 mb-4">Sửa thông tin Thiết bị</h2>
+            <h2 className="text-lg font-bold text-slate-900 mb-4">Cập nhật Kho Thiết bị</h2>
             <form onSubmit={handleUpdate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Tên thiết bị *</label>
@@ -385,17 +395,16 @@ export function DeviceListPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Trạng thái</label>
-                <select
-                  value={formStatus}
-                  onChange={(e) => setFormStatus(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
-                >
-                  <option value="IN_STOCK">Trong kho</option>
-                  <option value="IN_USE">Đang sử dụng</option>
-                  <option value="BROKEN">Hỏng</option>
-                  <option value="REPAIRING">Đang sửa chữa</option>
-                </select>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Tổng số lượng tồn kho</label>
+                <input
+                  type="number"
+                  min="1"
+                  required
+                  value={formTotalQuantity}
+                  onChange={(e) => setFormTotalQuantity(e.target.value)}
+                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none font-bold text-indigo-600"
+                />
+                <p className="text-xs text-slate-400 mt-1">Đang gán ở phòng: {activeDevice.inUseQuantity ?? 0}</p>
               </div>
               <div className="flex justify-end gap-3 pt-4">
                 <button
@@ -422,9 +431,11 @@ export function DeviceListPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
             <h2 className="text-lg font-bold text-slate-900 mb-1">Gán Thiết bị vào Phòng</h2>
-            <p className="text-xs text-slate-500 mb-4">
-              Thiết bị: <strong className="text-indigo-600">{activeDevice.name}</strong> (Hiện đã gán: {activeDevice.inUseQuantity || 0})
-            </p>
+            <div className="text-xs rounded-lg bg-slate-50 p-3 mb-4 space-y-1">
+              <div>Thiết bị: <strong className="text-indigo-600">{activeDevice.name}</strong></div>
+              <div>Tổng nhập kho: <strong>{activeDevice.totalQuantity}</strong> | Đang gán: <strong>{activeDevice.inUseQuantity}</strong></div>
+              <div>Số lượng khả dụng trong kho: <strong className="text-emerald-600 font-bold">{activeDevice.availableQuantity}</strong></div>
+            </div>
             <form onSubmit={handleAssignSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Mã/ID Phòng *</label>
@@ -438,12 +449,14 @@ export function DeviceListPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Số lượng gán</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Số lượng gán vào phòng *</label>
                 <input
                   type="number"
+                  min="1"
+                  max={activeDevice.availableQuantity}
                   value={assignQuantity}
                   onChange={(e) => setAssignQuantity(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none font-bold text-blue-600"
                 />
               </div>
               <div>

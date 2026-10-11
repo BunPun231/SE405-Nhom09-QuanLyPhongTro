@@ -7,8 +7,10 @@ export interface DeviceResponse {
   brand?: string;
   purchasePrice?: number;
   purchaseDate?: string;
+  totalQuantity: number;
+  inUseQuantity: number;
+  availableQuantity: number;
   status: "IN_STOCK" | "IN_USE" | "BROKEN" | "REPAIRING";
-  inUseQuantity?: number;
 }
 
 export interface DeviceUsageResponse {
@@ -39,6 +41,7 @@ export interface CreateDeviceRequest {
   brand?: string;
   purchasePrice?: number;
   purchaseDate?: string;
+  totalQuantity?: number;
 }
 
 export interface UpdateDeviceRequest {
@@ -47,6 +50,7 @@ export interface UpdateDeviceRequest {
   purchasePrice?: number;
   purchaseDate?: string;
   status?: string;
+  totalQuantity?: number;
 }
 
 export interface AssignDeviceRequest {

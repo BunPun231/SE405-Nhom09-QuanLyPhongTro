@@ -245,6 +245,7 @@ CREATE TABLE devices (
     brand          VARCHAR(100),
     purchase_price DECIMAL(12,2),
     purchase_date  DATE,
+    total_quantity INT NOT NULL DEFAULT 1,
     status         VARCHAR(20) NOT NULL DEFAULT 'IN_STOCK'
                    CHECK (status IN ('IN_STOCK','IN_USE','BROKEN','REPAIRING')),
     is_deleted     BOOLEAN NOT NULL DEFAULT FALSE,

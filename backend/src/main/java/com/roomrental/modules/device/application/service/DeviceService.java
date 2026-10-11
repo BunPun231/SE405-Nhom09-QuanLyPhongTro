@@ -65,6 +65,7 @@ public class DeviceService {
         device.setBrand(command.brand());
         device.setPurchasePrice(command.purchasePrice());
         device.setPurchaseDate(command.purchaseDate());
+        device.setTotalQuantity(command.totalQuantity() != null && command.totalQuantity() > 0 ? command.totalQuantity() : 1);
         device.setStatus(DeviceStatus.IN_STOCK);
 
         DeviceResult result = toResult(deviceRepository.save(device));
@@ -95,10 +96,24 @@ public class DeviceService {
         if (command.brand() != null) device.setBrand(command.brand());
         if (command.purchasePrice() != null) device.setPurchasePrice(command.purchasePrice());
         if (command.purchaseDate() != null) device.setPurchaseDate(command.purchaseDate());
-        if (command.status() != null) {
-            try { device.setStatus(DeviceStatus.valueOf(command.status())); }
-            catch (IllegalArgumentException e) { throw BaseException.badRequest("Invalid device status: " + command.status()); }
+
+        if (command.totalQuantity() != null && command.totalQuantity() > 0) {
+            int currentInUse = deviceUsageJpaRepository.findByDeviceId(deviceId).stream()
+                    .mapToInt(DeviceUsageEntity::getAssignedQuantity)
+                    .sum();
+            if (command.totalQuantity() < currentInUse) {
+                throw BaseException.badRequest("Tổng số lượng mới (" + command.totalQuantity() 
+                        + ") không được nhỏ hơn số lượng đang gán ở các phòng (" + currentInUse + ")");
+            }
+            device.setTotalQuantity(command.totalQuantity());
         }
+
+        // Auto calculate status based on available stock
+        int inUseQty = deviceUsageJpaRepository.findByDeviceId(deviceId).stream()
+                .mapToInt(DeviceUsageEntity::getAssignedQuantity)
+                .sum();
+        int availableQty = device.getTotalQuantity() - inUseQty;
+        device.setStatus(availableQty > 0 ? DeviceStatus.IN_STOCK : DeviceStatus.IN_USE);
 
         DeviceResult result = toResult(deviceRepository.save(device));
         UUID tenantId = SecurityUtils.requireTenantId();
@@ -111,6 +126,14 @@ public class DeviceService {
     @Transactional
     public void delete(Long motelId, Long deviceId) {
         Device device = findDevice(motelId, deviceId);
+        
+        int inUseQty = deviceUsageJpaRepository.findByDeviceId(deviceId).stream()
+                .mapToInt(DeviceUsageEntity::getAssignedQuantity)
+                .sum();
+        if (inUseQty > 0) {
+            throw BaseException.badRequest("Không thể xóa thiết bị đang được gán tại phòng (" + inUseQty + " thiết bị đang gán)");
+        }
+
         device.setDeleted(true);
         deviceRepository.save(device);
 
@@ -145,22 +168,36 @@ public class DeviceService {
         roomRepository.findByIdAndMotelId(command.roomId(), motelId)
                 .orElseThrow(() -> BaseException.notFound("Room", command.roomId()));
 
-        int qty = command.assignedQuantity() != null && command.assignedQuantity() > 0 ? command.assignedQuantity() : 1;
+        int requestedQty = command.assignedQuantity() != null && command.assignedQuantity() > 0 ? command.assignedQuantity() : 1;
         String cond = command.condition() != null ? command.condition() : "GOOD";
+
+        List<DeviceUsageEntity> usages = deviceUsageJpaRepository.findByDeviceId(deviceId);
+        int currentInUseExceptThisRoom = usages.stream()
+                .filter(u -> !u.getRoomId().equals(command.roomId()))
+                .mapToInt(DeviceUsageEntity::getAssignedQuantity)
+                .sum();
+
+        int availableForThisRoom = device.getTotalQuantity() - currentInUseExceptThisRoom;
+        if (requestedQty > availableForThisRoom) {
+            throw BaseException.badRequest("Số lượng gán (" + requestedQty 
+                    + ") vượt quá số lượng khả dụng trong kho (" + Math.max(0, availableForThisRoom) + ")");
+        }
 
         DeviceUsageEntity usage = deviceUsageJpaRepository.findByDeviceIdAndRoomId(deviceId, command.roomId())
                 .orElseGet(DeviceUsageEntity::new);
 
         usage.setDeviceId(deviceId);
         usage.setRoomId(command.roomId());
-        usage.setAssignedQuantity(qty);
+        usage.setAssignedQuantity(requestedQty);
         usage.setCondition(cond);
         usage.setUpdatedAt(OffsetDateTime.now());
 
         DeviceUsageEntity savedUsage = deviceUsageJpaRepository.save(usage);
 
-        // Update device status to IN_USE
-        device.setStatus(DeviceStatus.IN_USE);
+        // Update device auto-status based on available inventory
+        int newTotalInUse = currentInUseExceptThisRoom + requestedQty;
+        int newAvailable = device.getTotalQuantity() - newTotalInUse;
+        device.setStatus(newAvailable > 0 ? DeviceStatus.IN_STOCK : DeviceStatus.IN_USE);
         deviceRepository.save(device);
 
         // Movement log
@@ -187,12 +224,13 @@ public class DeviceService {
 
         deviceUsageJpaRepository.delete(usage);
 
-        // Check if device is still assigned elsewhere
-        List<DeviceUsageEntity> remainingUsages = deviceUsageJpaRepository.findByDeviceId(deviceId);
-        if (remainingUsages.isEmpty()) {
-            device.setStatus(DeviceStatus.IN_STOCK);
-            deviceRepository.save(device);
-        }
+        // Recalculate remaining in-use quantity and update device status automatically
+        int remainingInUse = deviceUsageJpaRepository.findByDeviceId(deviceId).stream()
+                .mapToInt(DeviceUsageEntity::getAssignedQuantity)
+                .sum();
+        int availableQty = device.getTotalQuantity() - remainingInUse;
+        device.setStatus(availableQty > 0 ? DeviceStatus.IN_STOCK : DeviceStatus.IN_USE);
+        deviceRepository.save(device);
 
         // Movement log
         DeviceMovementLogEntity log = new DeviceMovementLogEntity();
@@ -231,7 +269,10 @@ public class DeviceService {
         int inUseQty = deviceUsageJpaRepository.findByDeviceId(d.getId()).stream()
                 .mapToInt(DeviceUsageEntity::getAssignedQuantity)
                 .sum();
+        int availableQty = d.getTotalQuantity() - inUseQty;
+        String autoStatus = (availableQty > 0 ? DeviceStatus.IN_STOCK : DeviceStatus.IN_USE).name();
         return new DeviceResult(d.getId(), d.getMotelId(), d.getName(), d.getBrand(),
-                d.getPurchasePrice(), d.getPurchaseDate(), d.getStatus().name(), inUseQty);
+                d.getPurchasePrice(), d.getPurchaseDate(), d.getTotalQuantity(), inUseQty,
+                Math.max(0, availableQty), autoStatus);
     }
 }

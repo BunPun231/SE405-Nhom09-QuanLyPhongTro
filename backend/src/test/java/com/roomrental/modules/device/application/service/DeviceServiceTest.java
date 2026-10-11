@@ -34,7 +34,10 @@ import static org.mockito.Mockito.*;
 class DeviceServiceTest {
 
     @Mock private DeviceRepository deviceRepository;
+    @Mock private com.roomrental.modules.device.infrastructure.repository.DeviceUsageJpaRepository deviceUsageJpaRepository;
+    @Mock private com.roomrental.modules.device.infrastructure.repository.DeviceMovementLogJpaRepository deviceMovementLogJpaRepository;
     @Mock private MotelRepository motelRepository;
+    @Mock private com.roomrental.modules.room.domain.repository.RoomRepository roomRepository;
     @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
     @InjectMocks private DeviceService deviceService;
 
@@ -71,25 +74,28 @@ class DeviceServiceTest {
         });
 
         DeviceResult result = deviceService.create(1L,
-                new DeviceCreateCommand("AC", "Daikin", BigDecimal.valueOf(8000000), LocalDate.now()));
+                new DeviceCreateCommand("AC", "Daikin", BigDecimal.valueOf(8000000), LocalDate.now(), 1));
 
         assertThat(result.name()).isEqualTo("AC");
         assertThat(result.status()).isEqualTo("IN_STOCK");
     }
 
     @Test
-    @DisplayName("UC44: Update - invalid status")
-    void update_invalidStatus() {
+    @DisplayName("UC44: Update device quantity and status")
+    void update_success() {
         Device device = new Device();
         device.setId(1L);
         device.setMotelId(1L);
         device.setStatus(DeviceStatus.IN_STOCK);
+        device.setTotalQuantity(5);
         when(motelRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(motel));
         when(deviceRepository.findByIdAndMotelId(1L, 1L)).thenReturn(Optional.of(device));
+        when(deviceRepository.save(any(Device.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        assertThatThrownBy(() -> deviceService.update(1L, 1L,
-                new DeviceUpdateCommand(null, null, null, null, "INVALID")))
-                .isInstanceOf(BaseException.class);
+        DeviceResult result = deviceService.update(1L, 1L,
+                new DeviceUpdateCommand("AC Updated", "Daikin", BigDecimal.valueOf(8500000), LocalDate.now(), null, 10));
+
+        assertThat(result.totalQuantity()).isEqualTo(10);
     }
 
     @Test

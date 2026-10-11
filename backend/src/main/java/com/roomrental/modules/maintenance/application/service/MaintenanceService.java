@@ -84,7 +84,19 @@ public class MaintenanceService {
         ticket.setBeforeImages(imageUrls.toArray(String[]::new));
         ticket.setStatus(MaintenanceStatus.OPEN.name());
 
-        String prio = command.priority() != null ? command.priority() : MaintenancePriority.MEDIUM.name();
+        String prio = MaintenancePriority.MEDIUM.name();
+        if (command.priority() != null && !command.priority().isBlank()) {
+            String raw = command.priority().trim();
+            try {
+                prio = MaintenancePriority.valueOf(raw.toUpperCase()).name();
+            } catch (IllegalArgumentException e) {
+                if ("1".equals(raw)) prio = MaintenancePriority.LOW.name();
+                else if ("2".equals(raw)) prio = MaintenancePriority.MEDIUM.name();
+                else if ("3".equals(raw)) prio = MaintenancePriority.HIGH.name();
+                else if ("4".equals(raw)) prio = MaintenancePriority.URGENT.name();
+                else prio = MaintenancePriority.MEDIUM.name();
+            }
+        }
         ticket.setPriority(prio);
 
         MaintenanceTicketEntity saved = ticketRepository.save(ticket);
