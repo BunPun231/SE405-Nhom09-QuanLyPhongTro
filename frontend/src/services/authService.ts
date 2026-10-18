@@ -69,12 +69,17 @@ export const authService = {
     await api.post("/api/v1/auth/change-password", data);
   },
 
-  /** UC06: Forgot password — request reset email */
+  /** UC06: Forgot password — request reset email or SMS */
   async forgotPassword(data: ForgotPasswordRequest): Promise<void> {
     await api.post("/api/v1/auth/forgot-password", data);
   },
 
-  /** UC06: Reset password with token */
+  /** UC06: Verify OTP code */
+  async verifyOtp(data: { identity: string; otp: string }): Promise<void> {
+    await api.post("/api/v1/auth/verify-otp", data);
+  },
+
+  /** UC06: Reset password with OTP */
   async resetPassword(data: ResetPasswordRequest): Promise<void> {
     await api.post("/api/v1/auth/reset-password", data);
   },

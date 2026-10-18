@@ -23,5 +23,20 @@ public interface UserJpaRepository extends JpaRepository<UserEntity, UUID> {
 
     boolean existsByEmail(String email);
 
+    boolean existsByPhoneAndIdNot(String phone, UUID id);
+
+    boolean existsByEmailAndIdNot(String email, UUID id);
+
     Page<UserEntity> findByTenantIdAndRole(UUID tenantId, String role, Pageable pageable);
+
+    @Query("SELECT u FROM UserEntity u WHERE u.role = 'MANAGER' " +
+           "AND (:search IS NULL OR :search = '' OR LOWER(u.fullName) LIKE LOWER(CONCAT('%', :search, '%')) OR u.phone LIKE CONCAT('%', :search, '%') OR LOWER(u.email) LIKE LOWER(CONCAT('%', :search, '%'))) " +
+           "AND (:status IS NULL OR :status = '' OR u.status = :status)")
+    Page<UserEntity> findAllManagers(
+            @Param("search") String search,
+            @Param("status") String status,
+            Pageable pageable
+    );
 }
+
+

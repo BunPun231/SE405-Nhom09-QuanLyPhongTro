@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { 
@@ -9,36 +10,57 @@ import {
   Settings, 
   Gauge, 
   BarChart3,
-  LogOut
+  LogOut,
+  Layers,
+  Wrench,
+  UserCog,
+  Hammer
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
+import { useWorkspaceStore } from "@/store/workspaceStore";
 
 const NAV_ITEMS = [
-  { name: "Tổng quan", path: "/dashboard", icon: LayoutDashboard },
-  { name: "Khu trọ & Phòng", path: "/motels", icon: Building2 },
-  { name: "Dịch vụ", path: "/services", icon: Settings },
-  { name: "Khách thuê", path: "/residents", icon: Users },
-  { name: "Hợp đồng & Cọc", path: "/contracts", icon: FileText },
-  { name: "Ghi chỉ số", path: "/meter", icon: Gauge },
-  { name: "Hóa đơn", path: "/invoices", icon: Receipt },
-  { name: "Thống kê", path: "/reports", icon: BarChart3 },
-  { name: "Nhật ký", path: "/audit-log", icon: FileText },
-  { name: "Cấu hình", path: "/settings", icon: Settings }
+  { key: "dashboard", name: "Tổng quan", path: "/dashboard", icon: LayoutDashboard },
+  { key: "motels", name: "Khu trọ & Phòng", path: "/motels", icon: Building2 },
+  { key: "devices", name: "Kho thiết bị", path: "/devices", icon: Wrench },
+  { key: "technicians", name: "Kỹ thuật viên", path: "/technicians", icon: UserCog },
+  { key: "maintenance", name: "Bảo trì & Sự cố", path: "/maintenance", icon: Hammer },
+  { key: "services", name: "Dịch vụ", path: "/services", icon: Settings },
+  { key: "residents", name: "Khách thuê", path: "/residents", icon: Users },
+  { key: "contracts", name: "Hợp đồng & Cọc", path: "/contracts", icon: FileText },
+  { key: "meter", name: "Ghi chỉ số", path: "/meter", icon: Gauge },
+  { key: "invoices", name: "Hóa đơn", path: "/invoices", icon: Receipt },
+  { key: "reports", name: "Thống kê", path: "/reports", icon: BarChart3 },
+  { key: "auditLog", name: "Nhật ký", path: "/audit-log", icon: Layers },
+  { key: "settings", name: "Cấu hình", path: "/settings", icon: Settings }
 ];
 
 export function Sidebar() {
   const location = useLocation();
   const { user, logout } = useAuthStore();
+  const { modules, fetchConfig } = useWorkspaceStore();
 
   const isTenant = (user?.role as string) === "TENANT" || (user?.role as string) === "RESIDENT";
+  const isTechnician = (user?.role as string) === "TECHNICIAN";
+  const isManager = (user?.role as string) === "MANAGER";
 
-  // Filter NAV_ITEMS based on role
+  useEffect(() => {
+    if (isManager) {
+      fetchConfig();
+    }
+  }, [isManager]);
+
   const filteredItems = NAV_ITEMS.filter((item) => {
     if (isTenant) {
-      // Tenants only see Dashboard, Invoices, Settings, and Meter
-      return ["/dashboard", "/invoices", "/settings", "/meter"].includes(item.path);
+      return ["/dashboard", "/invoices", "/settings", "/meter", "/maintenance"].includes(item.path);
     }
-    // Admin / Manager sees all
+    if (isTechnician) {
+      return ["/maintenance", "/settings"].includes(item.path);
+    }
+    if (isManager) {
+      if (item.key === "dashboard" || item.key === "settings" || item.key === "devices" || item.key === "technicians" || item.key === "maintenance") return true;
+      return modules[item.key] !== false;
+    }
     return true;
   }).map((item) => {
     if (isTenant && item.path === "/invoices") {
@@ -47,16 +69,23 @@ export function Sidebar() {
     if (isTenant && item.path === "/meter") {
       return { ...item, name: "Ghi chỉ số điện nước" };
     }
+    if (isTenant && item.path === "/maintenance") {
+      return { ...item, name: "Báo sự cố bảo trì" };
+    }
+    if (isTechnician && item.path === "/maintenance") {
+      return { ...item, name: "Nhiệm vụ bảo trì" };
+    }
     return item;
   });
 
   const getRoleLabel = (role?: string) => {
     switch (role) {
       case "ADMIN":
-        return "Admin";
+        return "Super Admin";
       case "MANAGER":
         return "Quản lý";
       case "TENANT":
+      case "RESIDENT":
         return "Khách thuê";
       case "TECHNICIAN":
         return "Kỹ thuật viên";
@@ -106,8 +135,8 @@ export function Sidebar() {
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-warm text-white font-bold uppercase">
             {user?.name?.charAt(0) || "U"}
           </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold text-slate-800">{user?.name}</span>
+          <div className="flex flex-col min-w-0">
+            <span className="text-sm font-semibold text-slate-800 truncate">{user?.name}</span>
             <span className="text-xs text-slate-500">{getRoleLabel(user?.role)}</span>
           </div>
         </div>

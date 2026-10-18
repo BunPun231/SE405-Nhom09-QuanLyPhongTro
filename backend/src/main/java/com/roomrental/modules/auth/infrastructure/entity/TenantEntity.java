@@ -31,6 +31,10 @@ public class TenantEntity extends BaseEntity {
     @Column(nullable = false, length = 20)
     private String status;
 
+    @Column(name = "workspace_config", columnDefinition = "TEXT")
+    private String workspaceConfig;
+
+
     @PrePersist
     void prePersist() {
         if (id == null) {

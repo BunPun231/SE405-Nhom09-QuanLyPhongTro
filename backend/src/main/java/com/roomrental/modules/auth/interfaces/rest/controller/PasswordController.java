@@ -37,6 +37,13 @@ public class PasswordController {
         return ResponseEntity.ok(ApiResponse.ok(null, "OTP sent to your email/phone"));
     }
 
+    @PostMapping("/verify-otp")
+    @Operation(summary = "Verify OTP code (UC06)")
+    public ResponseEntity<ApiResponse<Void>> verifyOtp(@Valid @RequestBody com.roomrental.modules.auth.interfaces.rest.dto.VerifyOtpRequest body) {
+        authService.verifyOtp(body.identity(), body.otp());
+        return ResponseEntity.ok(ApiResponse.ok(null, "OTP verified successfully"));
+    }
+
     @PostMapping("/reset-password")
     @Operation(summary = "Reset password with OTP (UC06)")
     public ResponseEntity<ApiResponse<Void>> resetPassword(@Valid @RequestBody ResetPasswordRequest body) {

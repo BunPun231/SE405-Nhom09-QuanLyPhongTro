@@ -35,9 +35,18 @@ public class DeviceEntity extends BaseEntity {
     @Column(name = "purchase_date")
     private LocalDate purchaseDate;
 
+    @Column(name = "total_quantity", nullable = false)
+    private Integer totalQuantity = 1;
+
+    @Column(name = "repairing_quantity", nullable = false)
+    private Integer repairingQuantity = 0;
+
     @Column(nullable = false, length = 20)
     private String status;
 
     @Column(name = "is_deleted", nullable = false)
     private boolean deleted;
+
+    // Getter and Setter for repairingQuantity are handled by Lombok
+
 }

@@ -12,6 +12,9 @@ public class Device {
     private String brand;
     private BigDecimal purchasePrice;
     private LocalDate purchaseDate;
+    private Integer totalQuantity = 1;
+
+    private Integer repairingQuantity = 0;
     private DeviceStatus status;
     private boolean deleted;
     private OffsetDateTime createdAt;
@@ -35,6 +38,13 @@ public class Device {
     public LocalDate getPurchaseDate() { return purchaseDate; }
     public void setPurchaseDate(LocalDate purchaseDate) { this.purchaseDate = purchaseDate; }
 
+    public Integer getTotalQuantity() { return totalQuantity != null ? totalQuantity : 1; }
+
+    public Integer getRepairingQuantity() { return repairingQuantity != null ? repairingQuantity : 0; }
+    public void setTotalQuantity(Integer totalQuantity) { this.totalQuantity = totalQuantity; }
+
+    public void setRepairingQuantity(Integer repairingQuantity) { this.repairingQuantity = repairingQuantity; }
+
     public DeviceStatus getStatus() { return status; }
     public void setStatus(DeviceStatus status) { this.status = status; }
 
@@ -47,3 +57,4 @@ public class Device {
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(OffsetDateTime updatedAt) { this.updatedAt = updatedAt; }
 }
+

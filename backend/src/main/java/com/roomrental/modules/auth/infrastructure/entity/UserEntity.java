@@ -85,4 +85,9 @@ public class UserEntity extends BaseEntity {
             id = UUID.randomUUID();
         }
     }
+
+    // Explicit getter for fullName to avoid Lombok issues
+    public String getFullName() {
+        return this.fullName;
+    }
 }

@@ -1,15 +1,21 @@
-FROM eclipse-temurin:21-jdk AS build
+# syntax=docker/dockerfile:1
+FROM eclipse-temurin:21-jdk-alpine AS build
 WORKDIR /app
 
+# Copy Maven wrapper & pom.xml first to cache dependencies layer
 COPY backend/.mvn .mvn
-COPY backend/mvnw backend/mvnw.cmd backend/pom.xml ./
-RUN chmod +x mvnw || true
-RUN ./mvnw -q -DskipTests dependency:go-offline
+COPY backend/mvnw backend/pom.xml ./
+RUN chmod +x mvnw
 
+# Pre-fetch Maven dependencies into BuildKit cache mount
+RUN --mount=type=cache,target=/root/.m2 ./mvnw dependency:go-offline -B || true
+
+# Copy source code and build jar using BuildKit cache mount
 COPY backend/src src
-RUN ./mvnw -q -DskipTests clean package
+RUN --mount=type=cache,target=/root/.m2 ./mvnw package -DskipTests -B
 
-FROM eclipse-temurin:21-jre
+# Runtime stage (Alpine JRE for lightweight container & fast startup)
+FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080

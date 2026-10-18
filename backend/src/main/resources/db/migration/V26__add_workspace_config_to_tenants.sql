@@ -1,0 +1,1 @@
+ALTER TABLE tenants ADD COLUMN workspace_config TEXT DEFAULT NULL;

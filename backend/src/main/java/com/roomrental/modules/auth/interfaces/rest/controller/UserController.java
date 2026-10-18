@@ -23,12 +23,22 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+import com.roomrental.modules.auth.application.dto.UserProfileResponse;
+import com.roomrental.modules.auth.application.service.UserService;
+import com.roomrental.modules.auth.interfaces.rest.dto.UpdateProfileRequest;
+import jakarta.validation.Valid;
+import org.springframework.web.bind.annotation.RequestBody;
+
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+
 @RestController
 @RequestMapping("/api/v1/users")
 @Tag(name = "User Profile", description = "Endpoints for managing user profile and onboarding")
+@SecurityRequirement(name = "bearerAuth")
 public class UserController {
 
     private final UserRepository userRepository;
+    private final UserService userService;
     private final MotelJpaRepository motelJpaRepository;
     private final RoomJpaRepository roomJpaRepository;
     private final ContractJpaRepository contractJpaRepository;
@@ -39,6 +49,7 @@ public class UserController {
 
     public UserController(
             UserRepository userRepository,
+            UserService userService,
             MotelJpaRepository motelJpaRepository,
             RoomJpaRepository roomJpaRepository,
             ContractJpaRepository contractJpaRepository,
@@ -46,6 +57,7 @@ public class UserController {
             InvoiceJpaRepository invoiceJpaRepository,
             ServiceJpaRepository serviceJpaRepository) {
         this.userRepository = userRepository;
+        this.userService = userService;
         this.motelJpaRepository = motelJpaRepository;
         this.roomJpaRepository = roomJpaRepository;
         this.contractJpaRepository = contractJpaRepository;
@@ -53,6 +65,26 @@ public class UserController {
         this.invoiceJpaRepository = invoiceJpaRepository;
         this.serviceJpaRepository = serviceJpaRepository;
     }
+
+    @GetMapping("/profile")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Get current user profile (UC - View Profile)")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> getProfile() {
+        UUID userId = SecurityUtils.getCurrentUserId();
+        UserProfileResponse response = userService.getProfile(userId);
+        return ResponseEntity.ok(ApiResponse.ok(response));
+    }
+
+    @PutMapping("/profile")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Update current user profile (UC - Update Profile)")
+    public ResponseEntity<ApiResponse<UserProfileResponse>> updateProfile(@Valid @RequestBody UpdateProfileRequest body) {
+        UUID userId = SecurityUtils.getCurrentUserId();
+        UserProfileResponse response = userService.updateProfile(userId, body);
+        return ResponseEntity.ok(ApiResponse.ok(response, "Profile updated successfully"));
+    }
+
+
 
     @PutMapping("/onboarding-complete")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")

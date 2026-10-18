@@ -23,4 +23,11 @@ public interface UserRepository {
     boolean existsByPhone(String phone);
 
     boolean existsByEmail(String email);
+
+    boolean existsByPhoneAndIdNot(String phone, UUID id);
+
+    boolean existsByEmailAndIdNot(String email, UUID id);
+
+    org.springframework.data.domain.Page<User> findAllManagers(String search, com.roomrental.modules.auth.domain.model.UserStatus status, org.springframework.data.domain.Pageable pageable);
 }
+
