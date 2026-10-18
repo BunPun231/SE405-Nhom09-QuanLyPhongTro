@@ -72,15 +72,7 @@ public class DeviceService {
         Device saved = deviceRepository.save(device);
 
         // Movement log: lưu lịch sử số lượng ban đầu khi tạo thiết bị nhập kho
-        DeviceMovementLogEntity log = new DeviceMovementLogEntity();
-        log.setDeviceId(saved.getId());
-        log.setFromRoomId(null);
-        log.setToRoomId(null);
-        log.setAction("IMPORT");
-        log.setQuantity(initQty);
-        log.setChangedBy(SecurityUtils.getCurrentUserId());
-        log.setNote("Khởi tạo thiết bị vào kho");
-        deviceMovementLogJpaRepository.save(log);
+        recordMovementLog(saved, null, null, "IMPORT", initQty, "Khởi tạo thiết bị vào kho");
 
         DeviceResult result = toResult(saved);
         UUID tenantId = SecurityUtils.requireTenantId();
@@ -91,14 +83,19 @@ public class DeviceService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<DeviceResult> list(Long motelId, Pageable pageable) {
+    public PageResponse<DeviceResult> list(Long motelId, boolean includeDeleted, Pageable pageable) {
         requireMotel(motelId);
-        return PageResponse.from(deviceRepository.findByMotelId(motelId, pageable), this::toResult);
+        return PageResponse.from(deviceRepository.findByMotelId(motelId, includeDeleted, pageable), this::toResult);
+    }
+
+    @Transactional(readOnly = true)
+    public PageResponse<DeviceResult> list(Long motelId, Pageable pageable) {
+        return list(motelId, false, pageable);
     }
 
     @Transactional(readOnly = true)
     public DeviceResult get(Long motelId, Long deviceId) {
-        return toResult(findDevice(motelId, deviceId));
+        return toResult(findDeviceIncludingDeleted(motelId, deviceId));
     }
 
     @Transactional
@@ -133,19 +130,10 @@ public class DeviceService {
         }
         Device device = findDevice(motelId, deviceId);
         device.setTotalQuantity(device.getTotalQuantity() + command.quantity());
-        // status will be recomputed automatically
         device.setStatus(computeStatus(device));
         Device saved = deviceRepository.save(device);
 
-        DeviceMovementLogEntity log = new DeviceMovementLogEntity();
-        log.setDeviceId(deviceId);
-        log.setFromRoomId(null);
-        log.setToRoomId(null);
-        log.setAction("IMPORT");
-        log.setQuantity(command.quantity());
-        log.setChangedBy(SecurityUtils.getCurrentUserId());
-        log.setNote(command.note());
-        deviceMovementLogJpaRepository.save(log);
+        recordMovementLog(saved, null, null, "IMPORT", command.quantity(), command.note());
 
         return toResult(saved);
     }
@@ -162,25 +150,15 @@ public class DeviceService {
                 .sum();
         int repairingQty = device.getRepairingQuantity();
         int availableQty = device.getTotalQuantity() - inUseQty - repairingQty;
-        if (command.quantity() > availableQty) {
-            throw BaseException.badRequest("Số lượng xuất hủy (" + command.quantity() 
-                    + ") vượt quá số lượng khả dụng trong kho (" + Math.max(0, availableQty) + ")");
+        if (availableQty <= 0 || command.quantity() > availableQty) {
+            throw BaseException.badRequest("Số lượng khả dụng trong kho không đủ (Hiện có: " + Math.max(0, availableQty) + ")");
         }
 
         device.setTotalQuantity(device.getTotalQuantity() - command.quantity());
-        int newAvailable = device.getTotalQuantity() - inUseQty - device.getRepairingQuantity();
-        device.setStatus(newAvailable > 0 ? DeviceStatus.IN_STOCK : DeviceStatus.IN_USE);
+        device.setStatus(computeStatus(device));
         Device saved = deviceRepository.save(device);
 
-        DeviceMovementLogEntity log = new DeviceMovementLogEntity();
-        log.setDeviceId(deviceId);
-        log.setFromRoomId(null);
-        log.setToRoomId(null);
-        log.setAction("DISPOSE");
-        log.setQuantity(command.quantity());
-        log.setChangedBy(SecurityUtils.getCurrentUserId());
-        log.setNote(command.reason());
-        deviceMovementLogJpaRepository.save(log);
+        recordMovementLog(saved, null, null, "DISPOSE", command.quantity(), command.reason());
 
         return toResult(saved);
     }
@@ -230,7 +208,10 @@ public class DeviceService {
         roomRepository.findByIdAndMotelId(command.roomId(), motelId)
                 .orElseThrow(() -> BaseException.notFound("Room", command.roomId()));
 
-        int requestedQty = command.assignedQuantity() != null && command.assignedQuantity() > 0 ? command.assignedQuantity() : 1;
+        if (command.assignedQuantity() == null || command.assignedQuantity() <= 0) {
+            throw BaseException.badRequest("Số lượng gán phải lớn hơn 0");
+        }
+        int requestedQty = command.assignedQuantity();
         String cond = command.condition() != null ? command.condition() : "GOOD";
         if ("string".equalsIgnoreCase(cond) || (!cond.equals("NEW") && !cond.equals("GOOD") && !cond.equals("BROKEN"))) {
             cond = "GOOD";
@@ -242,10 +223,9 @@ public class DeviceService {
                 .mapToInt(DeviceUsageEntity::getAssignedQuantity)
                 .sum();
 
-        int availableForThisRoom = device.getTotalQuantity() - currentInUseExceptThisRoom;
-        if (requestedQty > availableForThisRoom) {
-            throw BaseException.badRequest("Số lượng gán (" + requestedQty 
-                    + ") vượt quá số lượng khả dụng trong kho (" + Math.max(0, availableForThisRoom) + ")");
+        int availableForThisRoom = device.getTotalQuantity() - currentInUseExceptThisRoom - device.getRepairingQuantity();
+        if (availableForThisRoom <= 0 || requestedQty > availableForThisRoom) {
+            throw BaseException.badRequest("Số lượng khả dụng trong kho không đủ (Hiện có: " + Math.max(0, availableForThisRoom) + ")");
         }
 
         DeviceUsageEntity usage = deviceUsageJpaRepository.findByDeviceIdAndRoomId(deviceId, command.roomId())
@@ -265,16 +245,7 @@ public class DeviceService {
         device.setStatus(newAvailable > 0 ? DeviceStatus.IN_STOCK : DeviceStatus.IN_USE);
         deviceRepository.save(device);
 
-        // Movement log
-        DeviceMovementLogEntity log = new DeviceMovementLogEntity();
-        log.setDeviceId(deviceId);
-        log.setFromRoomId(null);
-        log.setToRoomId(command.roomId());
-        log.setAction("ASSIGN");
-        log.setQuantity(requestedQty);
-        log.setChangedBy(SecurityUtils.getCurrentUserId());
-        log.setNote(command.note());
-        deviceMovementLogJpaRepository.save(log);
+        recordMovementLog(device, null, command.roomId(), "ASSIGN", requestedQty, command.note());
 
         return new DeviceUsageResult(
                 savedUsage.getId(), deviceId, device.getName(), device.getBrand(),
@@ -289,15 +260,11 @@ public class DeviceService {
                 .orElseThrow(() -> BaseException.notFound("DeviceUsage for room", roomId));
 
         Integer reqQty = command != null ? command.quantity() : null;
-        if (reqQty != null && reqQty <= 0) {
-            throw BaseException.badRequest("Số lượng thu hồi phải lớn hơn 0");
+        if (reqQty != null && (reqQty <= 0 || reqQty > usage.getAssignedQuantity())) {
+            throw BaseException.badRequest("Số lượng thu hồi không được vượt quá số lượng đang gán tại phòng");
         }
 
         int currentAssigned = usage.getAssignedQuantity();
-        if (reqQty != null && reqQty > currentAssigned) {
-            throw BaseException.badRequest("Số lượng thu hồi (" + reqQty + ") không được vượt quá số lượng đang gán tại phòng (" + currentAssigned + ")");
-        }
-
         int recalledQty;
 
         if (reqQty == null || reqQty >= currentAssigned) {
@@ -318,16 +285,7 @@ public class DeviceService {
         device.setStatus(availableQty > 0 ? DeviceStatus.IN_STOCK : DeviceStatus.IN_USE);
         deviceRepository.save(device);
 
-        // Movement log
-        DeviceMovementLogEntity log = new DeviceMovementLogEntity();
-        log.setDeviceId(deviceId);
-        log.setFromRoomId(roomId);
-        log.setToRoomId(null);
-        log.setAction("RECALL");
-        log.setQuantity(recalledQty);
-        log.setChangedBy(SecurityUtils.getCurrentUserId());
-        log.setNote(command != null ? command.note() : null);
-        deviceMovementLogJpaRepository.save(log);
+        recordMovementLog(device, roomId, null, "RECALL", recalledQty, command != null ? command.note() : null);
     }
 
     @Transactional
@@ -337,19 +295,13 @@ public class DeviceService {
 
     @Transactional(readOnly = true)
     public List<DeviceMovementLogResult> getMovementLogs(Long motelId, Long deviceId) {
-        Device device = findDevice(motelId, deviceId);
-        int inUseQty = deviceUsageJpaRepository.findByDeviceId(deviceId).stream()
-                .mapToInt(DeviceUsageEntity::getAssignedQuantity)
-                .sum();
-        int totalQty = device.getTotalQuantity();
-        int repairingQty = device.getRepairingQuantity();
-        int availableQty = totalQty - inUseQty - repairingQty;
-
+        findDeviceIncludingDeleted(motelId, deviceId);
         return deviceMovementLogJpaRepository.findByDeviceIdOrderByTimestampDesc(deviceId).stream()
                 .map(l -> new DeviceMovementLogResult(
                         l.getId(), l.getDeviceId(), l.getFromRoomId(), l.getToRoomId(),
                         l.getAction(), l.getQuantity(), l.getChangedBy(), l.getTimestamp(), l.getNote(),
-                        totalQty, availableQty, repairingQty, inUseQty))
+                        l.getSnapshotTotalQuantity(), l.getSnapshotAvailableQuantity(),
+                        l.getSnapshotRepairingQuantity(), l.getSnapshotInUseQuantity()))
                 .collect(Collectors.toList());
     }
 
@@ -363,6 +315,35 @@ public class DeviceService {
         requireMotel(motelId);
         return deviceRepository.findByIdAndMotelId(deviceId, motelId)
                 .orElseThrow(() -> BaseException.notFound("Device", deviceId));
+    }
+
+    private Device findDeviceIncludingDeleted(Long motelId, Long deviceId) {
+        requireMotel(motelId);
+        return deviceRepository.findByIdAndMotelIdIncludingDeleted(deviceId, motelId)
+                .orElseThrow(() -> BaseException.notFound("Device", deviceId));
+    }
+
+    private void recordMovementLog(Device device, Long fromRoomId, Long toRoomId, String action, int quantity, String note) {
+        int inUseQty = deviceUsageJpaRepository.findByDeviceId(device.getId()).stream()
+                .mapToInt(DeviceUsageEntity::getAssignedQuantity)
+                .sum();
+        int totalQty = device.getTotalQuantity();
+        int repQty = device.getRepairingQuantity();
+        int availQty = totalQty - inUseQty - repQty;
+
+        DeviceMovementLogEntity log = new DeviceMovementLogEntity();
+        log.setDeviceId(device.getId());
+        log.setFromRoomId(fromRoomId);
+        log.setToRoomId(toRoomId);
+        log.setAction(action);
+        log.setQuantity(quantity);
+        log.setChangedBy(SecurityUtils.getCurrentUserId());
+        log.setNote(note);
+        log.setSnapshotTotalQuantity(totalQty);
+        log.setSnapshotAvailableQuantity(availQty);
+        log.setSnapshotInUseQuantity(inUseQty);
+        log.setSnapshotRepairingQuantity(repQty);
+        deviceMovementLogJpaRepository.save(log);
     }
 
     // Helper to compute status based on available quantity considering repairing devices
@@ -383,7 +364,7 @@ public class DeviceService {
         String autoStatus = (availableQty > 0 ? DeviceStatus.IN_STOCK : DeviceStatus.IN_USE).name();
         return new DeviceResult(d.getId(), d.getMotelId(), d.getName(), d.getBrand(),
                 d.getPurchasePrice(), d.getPurchaseDate(), d.getTotalQuantity(), inUseQty, repairingQty,
-                Math.max(0, availableQty), autoStatus);
+                Math.max(0, availableQty), autoStatus, d.isDeleted());
     }
 
     @Transactional
@@ -401,15 +382,9 @@ public class DeviceService {
         device.setRepairingQuantity(device.getRepairingQuantity() + command.quantity());
         device.setStatus(computeStatus(device));
         Device saved = deviceRepository.save(device);
-        DeviceMovementLogEntity log = new DeviceMovementLogEntity();
-        log.setDeviceId(deviceId);
-        log.setFromRoomId(null);
-        log.setToRoomId(null);
-        log.setAction("SEND_TO_REPAIR");
-        log.setQuantity(command.quantity());
-        log.setChangedBy(SecurityUtils.getCurrentUserId());
-        log.setNote(command.note());
-        deviceMovementLogJpaRepository.save(log);
+
+        recordMovementLog(saved, null, null, "SEND_TO_REPAIR", command.quantity(), command.note());
+
         return toResult(saved);
     }
 
@@ -425,15 +400,9 @@ public class DeviceService {
         device.setRepairingQuantity(device.getRepairingQuantity() - command.quantity());
         device.setStatus(computeStatus(device));
         Device saved = deviceRepository.save(device);
-        DeviceMovementLogEntity log = new DeviceMovementLogEntity();
-        log.setDeviceId(deviceId);
-        log.setFromRoomId(null);
-        log.setToRoomId(null);
-        log.setAction("FINISH_REPAIR");
-        log.setQuantity(command.quantity());
-        log.setChangedBy(SecurityUtils.getCurrentUserId());
-        log.setNote(command.note());
-        deviceMovementLogJpaRepository.save(log);
+
+        recordMovementLog(saved, null, null, "FINISH_REPAIR", command.quantity(), command.note());
+
         return toResult(saved);
     }
 

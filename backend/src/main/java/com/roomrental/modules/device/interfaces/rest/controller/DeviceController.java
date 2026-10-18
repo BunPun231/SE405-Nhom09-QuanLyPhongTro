@@ -39,11 +39,13 @@ public class DeviceController {
     }
 
     @GetMapping("/devices")
-    @PreAuthorize("hasAnyRole('MANAGER','ADMIN','TECHNICIAN')")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN','TECHNICIAN','RESIDENT')")
     @Operation(summary = "List devices (UC41)")
     public ResponseEntity<ApiResponse<PageResponse<DeviceResult>>> list(
-            @PathVariable Long motelId, @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.ok(deviceService.list(motelId, pageable)));
+            @PathVariable Long motelId,
+            @RequestParam(value = "includeDeleted", defaultValue = "false") boolean includeDeleted,
+            @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.ok(deviceService.list(motelId, includeDeleted, pageable)));
     }
 
     @GetMapping("/devices/{deviceId}")

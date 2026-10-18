@@ -7,7 +7,7 @@ public record DeviceResult(
         Long id, Long motelId, String name, String brand,
         BigDecimal purchasePrice, LocalDate purchaseDate,
         Integer totalQuantity, Integer inUseQuantity, Integer repairingQuantity, Integer availableQuantity,
-        String status
+        String status, boolean isDeleted
 ) {
 }
 

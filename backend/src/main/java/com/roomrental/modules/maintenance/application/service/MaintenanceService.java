@@ -215,6 +215,10 @@ public class MaintenanceService {
                 log.setQuantity(qtyUsed);
                 log.setChangedBy(SecurityUtils.getCurrentUserId());
                 log.setNote("Sử dụng cho bảo trì phiếu #" + ticket.getId() + (command.note() != null ? ": " + command.note() : ""));
+                log.setSnapshotTotalQuantity(device.getTotalQuantity());
+                log.setSnapshotAvailableQuantity(newAvailable);
+                log.setSnapshotInUseQuantity(inUseQty);
+                log.setSnapshotRepairingQuantity(device.getRepairingQuantity());
                 deviceMovementLogJpaRepository.save(log);
 
                 BigDecimal price = item.unitPrice() != null ? item.unitPrice() :

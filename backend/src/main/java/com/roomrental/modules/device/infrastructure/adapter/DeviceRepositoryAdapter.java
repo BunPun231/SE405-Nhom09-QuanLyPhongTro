@@ -35,7 +35,20 @@ public class DeviceRepositoryAdapter implements DeviceRepository {
     }
 
     @Override
+    public Optional<Device> findByIdAndMotelIdIncludingDeleted(Long id, Long motelId) {
+        return jpa.findByIdAndMotelIdIncludingDeleted(id, motelId).map(mapper::toDomain);
+    }
+
+    @Override
     public Page<Device> findByMotelId(Long motelId, Pageable pageable) {
+        return jpa.findByMotelId(motelId, pageable).map(mapper::toDomain);
+    }
+
+    @Override
+    public Page<Device> findByMotelId(Long motelId, boolean includeDeleted, Pageable pageable) {
+        if (includeDeleted) {
+            return jpa.findByMotelIdIncludingDeleted(motelId, pageable).map(mapper::toDomain);
+        }
         return jpa.findByMotelId(motelId, pageable).map(mapper::toDomain);
     }
 }

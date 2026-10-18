@@ -36,6 +36,18 @@ public class DeviceMovementLogEntity {
     @Column(name = "note")
     private String note;
 
+    @Column(name = "snapshot_total_quantity")
+    private Integer snapshotTotalQuantity;
+
+    @Column(name = "snapshot_available_quantity")
+    private Integer snapshotAvailableQuantity;
+
+    @Column(name = "snapshot_in_use_quantity")
+    private Integer snapshotInUseQuantity;
+
+    @Column(name = "snapshot_repairing_quantity")
+    private Integer snapshotRepairingQuantity;
+
     public DeviceMovementLogEntity() {}
 
     public Long getId() { return id; }
@@ -64,4 +76,16 @@ public class DeviceMovementLogEntity {
 
     public String getNote() { return note; }
     public void setNote(String note) { this.note = note; }
+    public Integer getSnapshotTotalQuantity() { return snapshotTotalQuantity; }
+    public void setSnapshotTotalQuantity(Integer snapshotTotalQuantity) { this.snapshotTotalQuantity = snapshotTotalQuantity; }
+
+    public Integer getSnapshotAvailableQuantity() { return snapshotAvailableQuantity; }
+    public void setSnapshotAvailableQuantity(Integer snapshotAvailableQuantity) { this.snapshotAvailableQuantity = snapshotAvailableQuantity; }
+
+    public Integer getSnapshotInUseQuantity() { return snapshotInUseQuantity; }
+    public void setSnapshotInUseQuantity(Integer snapshotInUseQuantity) { this.snapshotInUseQuantity = snapshotInUseQuantity; }
+
+    public Integer getSnapshotRepairingQuantity() { return snapshotRepairingQuantity; }
+    public void setSnapshotRepairingQuantity(Integer snapshotRepairingQuantity) { this.snapshotRepairingQuantity = snapshotRepairingQuantity; }
+
 }
