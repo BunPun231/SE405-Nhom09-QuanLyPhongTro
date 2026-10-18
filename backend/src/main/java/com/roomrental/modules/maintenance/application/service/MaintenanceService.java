@@ -14,6 +14,7 @@ import com.roomrental.modules.device.infrastructure.repository.DeviceMovementLog
 import com.roomrental.modules.device.infrastructure.repository.DeviceUsageJpaRepository;
 import com.roomrental.modules.finance.application.service.CloudinaryService;
 import com.roomrental.modules.maintenance.application.dto.*;
+import com.roomrental.modules.maintenance.domain.model.MaintenanceCategory;
 import com.roomrental.modules.maintenance.domain.model.MaintenancePriority;
 import com.roomrental.modules.maintenance.domain.model.MaintenanceStatus;
 import com.roomrental.modules.maintenance.infrastructure.entity.MaintenanceDetailEntity;
@@ -90,7 +91,16 @@ public class MaintenanceService {
         MaintenanceTicketEntity ticket = new MaintenanceTicketEntity();
         ticket.setRoomId(room.getId());
         ticket.setReportedBy(reporterId);
-        ticket.setCategory(command.category() != null ? command.category() : "OTHER");
+        
+        String cat = MaintenanceCategory.OTHER.name();
+        if (command.category() != null && !command.category().isBlank()) {
+            try {
+                cat = MaintenanceCategory.valueOf(command.category().trim().toUpperCase()).name();
+            } catch (IllegalArgumentException e) {
+                cat = MaintenanceCategory.OTHER.name();
+            }
+        }
+        ticket.setCategory(cat);
         ticket.setDescription(command.description());
         ticket.setBeforeImages(imageUrls.toArray(String[]::new));
         ticket.setStatus(MaintenanceStatus.OPEN.name());
@@ -235,6 +245,54 @@ public class MaintenanceService {
         ticket.setCompletedAt(OffsetDateTime.now());
         ticket.setUpdatedAt(OffsetDateTime.now());
 
+        MaintenanceTicketEntity saved = ticketRepository.save(ticket);
+        return toResult(saved);
+    }
+    @Transactional
+    public MaintenanceTicketResult cancelTicket(Long ticketId) {
+        MaintenanceTicketEntity ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> BaseException.notFound("MaintenanceTicket", ticketId));
+
+        String status = ticket.getStatus();
+        if (!"OPEN".equalsIgnoreCase(status) && !"ASSIGNED".equalsIgnoreCase(status) && !"PROCESSING".equalsIgnoreCase(status)) {
+            throw BaseException.badRequest("Chỉ cho phép hủy khi phiếu đang ở trạng thái OPEN hoặc ASSIGNED");
+        }
+
+        ticket.setStatus(MaintenanceStatus.CANCELLED.name());
+        ticket.setUpdatedAt(OffsetDateTime.now());
+        MaintenanceTicketEntity saved = ticketRepository.save(ticket);
+        return toResult(saved);
+    }
+
+    @Transactional
+    public MaintenanceTicketResult updateTicket(Long ticketId, UpdateTicketCommand command) {
+        MaintenanceTicketEntity ticket = ticketRepository.findById(ticketId)
+                .orElseThrow(() -> BaseException.notFound("MaintenanceTicket", ticketId));
+
+        String status = ticket.getStatus();
+        if ("COMPLETED".equalsIgnoreCase(status) || "CANCELLED".equalsIgnoreCase(status)) {
+            throw BaseException.badRequest("Không thể chỉnh sửa phiếu bảo trì đã hoàn thành hoặc đã bị hủy");
+        }
+
+        if (command.category() != null && !command.category().isBlank()) {
+            try {
+                ticket.setCategory(MaintenanceCategory.valueOf(command.category().trim().toUpperCase()).name());
+            } catch (IllegalArgumentException e) {
+                // keep existing
+            }
+        }
+        if (command.description() != null) {
+            ticket.setDescription(command.description());
+        }
+        if (command.priority() != null && !command.priority().isBlank()) {
+            String raw = command.priority().trim();
+            try {
+                ticket.setPriority(MaintenancePriority.valueOf(raw.toUpperCase()).name());
+            } catch (IllegalArgumentException e) {
+                // ignore
+            }
+        }
+        ticket.setUpdatedAt(OffsetDateTime.now());
         MaintenanceTicketEntity saved = ticketRepository.save(ticket);
         return toResult(saved);
     }

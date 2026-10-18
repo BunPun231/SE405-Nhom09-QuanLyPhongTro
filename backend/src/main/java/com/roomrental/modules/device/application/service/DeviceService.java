@@ -294,6 +294,10 @@ public class DeviceService {
         }
 
         int currentAssigned = usage.getAssignedQuantity();
+        if (reqQty != null && reqQty > currentAssigned) {
+            throw BaseException.badRequest("Số lượng thu hồi (" + reqQty + ") không được vượt quá số lượng đang gán tại phòng (" + currentAssigned + ")");
+        }
+
         int recalledQty;
 
         if (reqQty == null || reqQty >= currentAssigned) {
@@ -333,11 +337,19 @@ public class DeviceService {
 
     @Transactional(readOnly = true)
     public List<DeviceMovementLogResult> getMovementLogs(Long motelId, Long deviceId) {
-        findDevice(motelId, deviceId);
+        Device device = findDevice(motelId, deviceId);
+        int inUseQty = deviceUsageJpaRepository.findByDeviceId(deviceId).stream()
+                .mapToInt(DeviceUsageEntity::getAssignedQuantity)
+                .sum();
+        int totalQty = device.getTotalQuantity();
+        int repairingQty = device.getRepairingQuantity();
+        int availableQty = totalQty - inUseQty - repairingQty;
+
         return deviceMovementLogJpaRepository.findByDeviceIdOrderByTimestampDesc(deviceId).stream()
                 .map(l -> new DeviceMovementLogResult(
                         l.getId(), l.getDeviceId(), l.getFromRoomId(), l.getToRoomId(),
-                        l.getAction(), l.getQuantity(), l.getChangedBy(), l.getTimestamp(), l.getNote()))
+                        l.getAction(), l.getQuantity(), l.getChangedBy(), l.getTimestamp(), l.getNote(),
+                        totalQty, availableQty, repairingQty, inUseQty))
                 .collect(Collectors.toList());
     }
 

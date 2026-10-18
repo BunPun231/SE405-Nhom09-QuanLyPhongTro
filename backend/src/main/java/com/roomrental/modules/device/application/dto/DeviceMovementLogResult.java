@@ -12,6 +12,10 @@ public record DeviceMovementLogResult(
         Integer quantity,
         UUID changedBy,
         OffsetDateTime timestamp,
-        String note
+        String note,
+        Integer totalQuantity,
+        Integer availableQuantity,
+        Integer repairingQuantity,
+        Integer inUseQuantity
 ) {}
 

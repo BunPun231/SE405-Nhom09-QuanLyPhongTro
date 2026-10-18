@@ -78,6 +78,25 @@ public class MaintenanceController {
         MaintenanceTicketResult result = maintenanceService.completeTicket(ticketId, command);
         return ResponseEntity.ok(ApiResponse.ok(result, "Ticket completed successfully"));
     }
+    @PostMapping("/tickets/{ticketId}/cancel")
+    @PreAuthorize("hasAnyRole('RESIDENT','MANAGER','ADMIN')")
+    @Operation(summary = "Cancel maintenance ticket")
+    public ResponseEntity<ApiResponse<MaintenanceTicketResult>> cancelTicket(@PathVariable Long ticketId) {
+        MaintenanceTicketResult result = maintenanceService.cancelTicket(ticketId);
+        return ResponseEntity.ok(ApiResponse.ok(result, "Ticket cancelled successfully"));
+    }
+
+    @PutMapping("/tickets/{ticketId}")
+    @PreAuthorize("hasAnyRole('RESIDENT','MANAGER','ADMIN')")
+    @Operation(summary = "Update maintenance ticket details")
+    public ResponseEntity<ApiResponse<MaintenanceTicketResult>> updateTicket(
+            @PathVariable Long ticketId, @RequestBody UpdateTicketRequest body) {
+        UpdateTicketCommand command = new UpdateTicketCommand(
+                body.category(), body.description(), body.priority());
+        MaintenanceTicketResult result = maintenanceService.updateTicket(ticketId, command);
+        return ResponseEntity.ok(ApiResponse.ok(result, "Ticket updated successfully"));
+    }
+
 
     @GetMapping("/motels/{motelId}/tickets")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")

@@ -36,6 +36,10 @@ export interface DeviceMovementLogResponse {
   changedBy: string;
   timestamp: string;
   note?: string;
+  totalQuantity?: number;
+  availableQuantity?: number;
+  repairingQuantity?: number;
+  inUseQuantity?: number;
 }
 
 export interface CreateDeviceRequest {

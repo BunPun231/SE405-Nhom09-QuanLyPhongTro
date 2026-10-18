@@ -69,9 +69,15 @@ export const maintenanceService = {
     return res.data.data;
   },
 
-  /** Get ticket detail */
-  async getTicketDetail(ticketId: number): Promise<MaintenanceTicketResponse> {
-    const res = await api.get<{ data: MaintenanceTicketResponse }>(`/api/maintenance/tickets/${ticketId}`);
+  /** Cancel maintenance ticket */
+  async cancelTicket(ticketId: number): Promise<MaintenanceTicketResponse> {
+    const res = await api.post<{ data: MaintenanceTicketResponse }>(`/api/maintenance/tickets/${ticketId}/cancel`);
+    return res.data.data;
+  },
+
+  /** Update maintenance ticket */
+  async updateTicket(ticketId: number, data: { category?: string; description?: string; priority?: string }): Promise<MaintenanceTicketResponse> {
+    const res = await api.put<{ data: MaintenanceTicketResponse }>(`/api/maintenance/tickets/${ticketId}`, data);
     return res.data.data;
   },
 
