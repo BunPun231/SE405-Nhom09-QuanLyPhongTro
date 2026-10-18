@@ -274,7 +274,8 @@ CREATE TABLE device_movement_logs (
     device_id    BIGINT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
     from_room_id BIGINT REFERENCES rooms(id),
     to_room_id   BIGINT REFERENCES rooms(id),
-    action       VARCHAR(20) NOT NULL CHECK (action IN ('ASSIGN','RECALL')),
+    quantity     INT NOT NULL DEFAULT 1,
+    action       VARCHAR(20) NOT NULL CHECK (action IN ('ASSIGN','RECALL','IMPORT','DISPOSE','MAINTENANCE_USE')),
     changed_by   UUID NOT NULL REFERENCES users(id),
     timestamp    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     note         TEXT
@@ -448,9 +449,9 @@ CREATE TABLE maintenance_tickets (
 CREATE TABLE maintenance_details (
     id                  BIGSERIAL PRIMARY KEY,
     ticket_id           BIGINT NOT NULL REFERENCES maintenance_tickets(id) ON DELETE CASCADE,
-    device_id           BIGINT NOT NULL REFERENCES devices(id),
-    quantity_used       INT NOT NULL,
-    unit_price_snapshot DECIMAL(12,2) NOT NULL,
+    device_id           BIGINT REFERENCES devices(id),
+    quantity_used       INT NOT NULL DEFAULT 0,
+    unit_price_snapshot DECIMAL(12,2) NOT NULL DEFAULT 0,
     after_images        TEXT[],
     note                TEXT,
     created_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP

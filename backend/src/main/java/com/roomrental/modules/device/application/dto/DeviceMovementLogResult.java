@@ -9,7 +9,9 @@ public record DeviceMovementLogResult(
         Long fromRoomId,
         Long toRoomId,
         String action,
+        Integer quantity,
         UUID changedBy,
         OffsetDateTime timestamp,
         String note
 ) {}
+

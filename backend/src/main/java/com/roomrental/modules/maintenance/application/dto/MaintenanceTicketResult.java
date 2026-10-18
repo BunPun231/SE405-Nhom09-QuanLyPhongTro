@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public record MaintenanceTicketResult(
         Long id,
+        Long motelId,
         Long roomId,
         String roomNumber,
         UUID reportedBy,

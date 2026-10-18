@@ -61,8 +61,28 @@ public class DeviceController {
             @PathVariable Long motelId, @PathVariable Long deviceId,
             @RequestBody DeviceUpdateRequest body) {
         DeviceResult result = deviceService.update(motelId, deviceId, new DeviceUpdateCommand(
-                body.name(), body.brand(), body.purchasePrice(), body.purchaseDate(), body.status(), body.totalQuantity()));
+                body.name(), body.brand(), body.purchasePrice(), body.purchaseDate()));
         return ResponseEntity.ok(ApiResponse.ok(result, "Device updated"));
+    }
+
+    @PostMapping("/devices/{deviceId}/import")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    @Operation(summary = "Import more devices to stock")
+    public ResponseEntity<ApiResponse<DeviceResult>> importStock(
+            @PathVariable Long motelId, @PathVariable Long deviceId,
+            @Valid @RequestBody DeviceImportRequest body) {
+        DeviceResult result = deviceService.importStock(motelId, deviceId, new DeviceImportCommand(body.quantity(), body.note()));
+        return ResponseEntity.ok(ApiResponse.ok(result, "Devices imported to stock"));
+    }
+
+    @PostMapping("/devices/{deviceId}/dispose")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    @Operation(summary = "Dispose devices from stock")
+    public ResponseEntity<ApiResponse<DeviceResult>> disposeStock(
+            @PathVariable Long motelId, @PathVariable Long deviceId,
+            @Valid @RequestBody DeviceDisposeRequest body) {
+        DeviceResult result = deviceService.disposeStock(motelId, deviceId, new DeviceDisposeCommand(body.quantity(), body.reason()));
+        return ResponseEntity.ok(ApiResponse.ok(result, "Devices disposed from stock"));
     }
 
     @DeleteMapping("/devices/{deviceId}")
@@ -100,8 +120,9 @@ public class DeviceController {
             @PathVariable Long motelId, @PathVariable Long deviceId,
             @RequestParam Long roomId,
             @RequestBody(required = false) DeviceRecallRequest body) {
+        Integer quantity = body != null ? body.quantity() : null;
         String note = body != null ? body.note() : null;
-        deviceService.recallDeviceFromRoom(motelId, deviceId, roomId, note);
+        deviceService.recallDeviceFromRoom(motelId, deviceId, roomId, new DeviceRecallCommand(quantity, note));
         return ResponseEntity.ok(ApiResponse.ok("Device recalled from room"));
     }
 
@@ -112,4 +133,28 @@ public class DeviceController {
             @PathVariable Long motelId, @PathVariable Long deviceId) {
         return ResponseEntity.ok(ApiResponse.ok(deviceService.getMovementLogs(motelId, deviceId)));
     }
+
+    @PostMapping("/devices/{deviceId}/send-to-repair")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    @Operation(summary = "Send devices to repair (UC85)")
+    public ResponseEntity<ApiResponse<DeviceResult>> sendToRepair(
+            @PathVariable Long motelId, @PathVariable Long deviceId,
+            @Valid @RequestBody DeviceSendToRepairRequest body) {
+        DeviceResult result = deviceService.sendToRepair(motelId, deviceId,
+                new DeviceSendToRepairCommand(body.quantity(), body.note()));
+        return ResponseEntity.ok(ApiResponse.ok(result, "Devices sent to repair"));
+    }
+
+    @PostMapping("/devices/{deviceId}/finish-repair")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    @Operation(summary = "Finish repair of devices (UC86)")
+    public ResponseEntity<ApiResponse<DeviceResult>> finishRepair(
+            @PathVariable Long motelId, @PathVariable Long deviceId,
+            @Valid @RequestBody DeviceFinishRepairRequest body) {
+        DeviceResult result = deviceService.finishRepair(motelId, deviceId,
+                new DeviceFinishRepairCommand(body.quantity(), body.note()));
+        return ResponseEntity.ok(ApiResponse.ok(result, "Devices repair finished"));
+    }
+
+
 }

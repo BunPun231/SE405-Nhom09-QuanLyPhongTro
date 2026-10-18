@@ -24,6 +24,9 @@ public class DeviceMovementLogEntity {
     @Column(name = "action", nullable = false, length = 20)
     private String action;
 
+    @Column(name = "quantity", nullable = false)
+    private Integer quantity = 1;
+
     @Column(name = "changed_by", nullable = false)
     private UUID changedBy;
 
@@ -46,6 +49,9 @@ public class DeviceMovementLogEntity {
 
     public Long getToRoomId() { return toRoomId; }
     public void setToRoomId(Long toRoomId) { this.toRoomId = toRoomId; }
+
+    public Integer getQuantity() { return quantity != null ? quantity : 1; }
+    public void setQuantity(Integer quantity) { this.quantity = quantity; }
 
     public String getAction() { return action; }
     public void setAction(String action) { this.action = action; }

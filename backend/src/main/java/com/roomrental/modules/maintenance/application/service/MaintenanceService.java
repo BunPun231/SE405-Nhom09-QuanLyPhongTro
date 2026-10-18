@@ -6,7 +6,12 @@ import com.roomrental.common.util.SecurityUtils;
 import com.roomrental.modules.auth.infrastructure.entity.UserEntity;
 import com.roomrental.modules.auth.infrastructure.repository.UserJpaRepository;
 import com.roomrental.modules.device.domain.model.Device;
+import com.roomrental.modules.device.domain.model.DeviceStatus;
 import com.roomrental.modules.device.domain.repository.DeviceRepository;
+import com.roomrental.modules.device.infrastructure.entity.DeviceMovementLogEntity;
+import com.roomrental.modules.device.infrastructure.entity.DeviceUsageEntity;
+import com.roomrental.modules.device.infrastructure.repository.DeviceMovementLogJpaRepository;
+import com.roomrental.modules.device.infrastructure.repository.DeviceUsageJpaRepository;
 import com.roomrental.modules.finance.application.service.CloudinaryService;
 import com.roomrental.modules.maintenance.application.dto.*;
 import com.roomrental.modules.maintenance.domain.model.MaintenancePriority;
@@ -36,6 +41,8 @@ public class MaintenanceService {
     private final MaintenanceDetailJpaRepository detailRepository;
     private final RoomRepository roomRepository;
     private final DeviceRepository deviceRepository;
+    private final DeviceUsageJpaRepository deviceUsageJpaRepository;
+    private final DeviceMovementLogJpaRepository deviceMovementLogJpaRepository;
     private final UserJpaRepository userRepository;
     private final CloudinaryService cloudinaryService;
 
@@ -44,12 +51,16 @@ public class MaintenanceService {
             MaintenanceDetailJpaRepository detailRepository,
             RoomRepository roomRepository,
             DeviceRepository deviceRepository,
+            DeviceUsageJpaRepository deviceUsageJpaRepository,
+            DeviceMovementLogJpaRepository deviceMovementLogJpaRepository,
             UserJpaRepository userRepository,
             CloudinaryService cloudinaryService) {
         this.ticketRepository = ticketRepository;
         this.detailRepository = detailRepository;
         this.roomRepository = roomRepository;
         this.deviceRepository = deviceRepository;
+        this.deviceUsageJpaRepository = deviceUsageJpaRepository;
+        this.deviceMovementLogJpaRepository = deviceMovementLogJpaRepository;
         this.userRepository = userRepository;
         this.cloudinaryService = cloudinaryService;
     }
@@ -108,6 +119,10 @@ public class MaintenanceService {
         MaintenanceTicketEntity ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> BaseException.notFound("MaintenanceTicket", ticketId));
 
+        if (MaintenanceStatus.COMPLETED.name().equalsIgnoreCase(ticket.getStatus())) {
+            throw BaseException.badRequest("Phiếu bảo trì đã hoàn thành không thể mở lại");
+        }
+
         if (command.technicianId() != null) {
             userRepository.findById(command.technicianId())
                     .orElseThrow(() -> BaseException.notFound("Technician", command.technicianId()));
@@ -126,6 +141,16 @@ public class MaintenanceService {
         MaintenanceTicketEntity ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> BaseException.notFound("MaintenanceTicket", ticketId));
 
+        if (MaintenanceStatus.COMPLETED.name().equalsIgnoreCase(ticket.getStatus())) {
+            throw BaseException.badRequest("Phiếu bảo trì đã hoàn thành không thể mở lại");
+        }
+        if (MaintenanceStatus.CANCELLED.name().equalsIgnoreCase(ticket.getStatus())) {
+            throw BaseException.badRequest("Phiếu bảo trì đã bị hủy không thể hoàn thành");
+        }
+
+        Room room = roomRepository.findById(ticket.getRoomId())
+                .orElseThrow(() -> BaseException.notFound("Room", ticket.getRoomId()));
+
         // Upload after_images to Cloudinary if present
         List<String> afterUrls = new ArrayList<>();
         if (command.afterImageFiles() != null && !command.afterImageFiles().isEmpty()) {
@@ -141,17 +166,54 @@ public class MaintenanceService {
             }
         }
 
-        // Save details for used devices
+        // Save details for used devices and deduct inventory
         if (command.usedDevices() != null && !command.usedDevices().isEmpty()) {
             for (UsedDeviceItem item : command.usedDevices()) {
-                Device device = deviceRepository.findById(item.deviceId()).orElse(null);
+                if (item == null || item.deviceId() == null) continue;
+
+                Device device = deviceRepository.findById(item.deviceId())
+                        .orElseThrow(() -> BaseException.badRequest("Thiết bị không tồn tại với ID: " + item.deviceId()));
+
+                if (!device.getMotelId().equals(room.getMotelId())) {
+                    throw BaseException.badRequest("Thiết bị không thuộc nhà trọ của phòng này");
+                }
+
+                int qtyUsed = item.quantityUsed() != null && item.quantityUsed() > 0 ? item.quantityUsed() : 1;
+
+                int inUseQty = deviceUsageJpaRepository.findByDeviceId(device.getId()).stream()
+                        .mapToInt(DeviceUsageEntity::getAssignedQuantity)
+                        .sum();
+                int availableQty = device.getTotalQuantity() - inUseQty - device.getRepairingQuantity();
+                if (qtyUsed > availableQty) {
+                    throw BaseException.badRequest("Số lượng vật tư sử dụng (" + qtyUsed 
+                            + ") vượt quá số lượng khả dụng trong kho (" + Math.max(0, availableQty) + ")");
+                }
+
+                // Trừ kho vật tư
+                device.setTotalQuantity(device.getTotalQuantity() - qtyUsed);
+                int newAvailable = device.getTotalQuantity() - inUseQty - device.getRepairingQuantity();
+                device.setStatus(newAvailable > 0 ? DeviceStatus.IN_STOCK : DeviceStatus.IN_USE);
+                deviceRepository.save(device);
+
+
+                // Ghi nhật ký biến động kho (action = 'MAINTENANCE_USE')
+                DeviceMovementLogEntity log = new DeviceMovementLogEntity();
+                log.setDeviceId(device.getId());
+                log.setFromRoomId(null);
+                log.setToRoomId(ticket.getRoomId());
+                log.setAction("MAINTENANCE_USE");
+                log.setQuantity(qtyUsed);
+                log.setChangedBy(SecurityUtils.getCurrentUserId());
+                log.setNote("Sử dụng cho bảo trì phiếu #" + ticket.getId() + (command.note() != null ? ": " + command.note() : ""));
+                deviceMovementLogJpaRepository.save(log);
+
                 BigDecimal price = item.unitPrice() != null ? item.unitPrice() :
-                        (device != null && device.getPurchasePrice() != null ? device.getPurchasePrice() : BigDecimal.ZERO);
+                        (device.getPurchasePrice() != null ? device.getPurchasePrice() : BigDecimal.ZERO);
 
                 MaintenanceDetailEntity detail = new MaintenanceDetailEntity();
                 detail.setTicketId(ticketId);
-                detail.setDeviceId(item.deviceId());
-                detail.setQuantityUsed(item.quantityUsed() != null ? item.quantityUsed() : 1);
+                detail.setDeviceId(device.getId());
+                detail.setQuantityUsed(qtyUsed);
                 detail.setUnitPriceSnapshot(price);
                 detail.setAfterImages(afterUrls.toArray(String[]::new));
                 detail.setNote(command.note());
@@ -161,7 +223,7 @@ public class MaintenanceService {
             // Create a general detail record if photos/notes provided without specific devices
             MaintenanceDetailEntity detail = new MaintenanceDetailEntity();
             detail.setTicketId(ticketId);
-            detail.setDeviceId(0L); // 0 indicating no specific device
+            detail.setDeviceId(null); // null indicates no device part replacement
             detail.setQuantityUsed(0);
             detail.setUnitPriceSnapshot(BigDecimal.ZERO);
             detail.setAfterImages(afterUrls.toArray(String[]::new));
@@ -213,6 +275,7 @@ public class MaintenanceService {
 
     private MaintenanceTicketResult toResult(MaintenanceTicketEntity ticket) {
         Room room = roomRepository.findById(ticket.getRoomId()).orElse(null);
+        Long motelId = room != null ? room.getMotelId() : null;
         String roomNumber = room != null ? room.getRoomNumber() : "Unknown";
 
         UserEntity reporter = userRepository.findById(ticket.getReportedBy()).orElse(null);
@@ -238,7 +301,7 @@ public class MaintenanceService {
         }).collect(Collectors.toList());
 
         return new MaintenanceTicketResult(
-                ticket.getId(), ticket.getRoomId(), roomNumber,
+                ticket.getId(), motelId, ticket.getRoomId(), roomNumber,
                 ticket.getReportedBy(), reporterName,
                 ticket.getAssignedTo(), technicianName,
                 ticket.getCategory(), ticket.getDescription(),

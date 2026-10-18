@@ -161,13 +161,18 @@ export function MaintenancePage() {
     setActiveTicket(ticket);
     setCompleteNote("");
     setAfterFiles([]);
-    if (selectedMotelId) {
+    setSelectedDeviceId(null);
+    setUsedQty(1);
+    const motelIdToUse = ticket.motelId || selectedMotelId;
+    if (motelIdToUse) {
       try {
-        const res = await deviceService.getDevices(selectedMotelId);
+        const res = await deviceService.getDevices(motelIdToUse);
         setDevices(res.content);
       } catch (e) {
         setDevices([]);
       }
+    } else {
+      setDevices([]);
     }
     setIsCompleteOpen(true);
   };
@@ -187,12 +192,12 @@ export function MaintenancePage() {
         { usedDevices, note: completeNote },
         afterFiles
       );
-      alert("Hoàn thành bảo trì thành công! Backend đã upload ảnh hoàn thành lên Cloudinary.");
+      alert("Hoàn thành bảo trì thành công! Backend đã cập nhật trạng thái và trừ kho vật tư.");
       setIsCompleteOpen(false);
       if (isTechnician) loadMyTasks();
       else if (selectedMotelId) loadMotelTickets(selectedMotelId);
-    } catch (e) {
-      alert("Hoàn thành phiếu bảo trì thất bại");
+    } catch (error: any) {
+      alert(error.response?.data?.message || "Hoàn thành phiếu bảo trì thất bại");
     } finally {
       setLoading(false);
     }
@@ -487,22 +492,30 @@ export function MaintenancePage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Vật tư / Thiết bị đã dùng (từ Kho)</label>
                 <select
                   value={selectedDeviceId || ""}
-                  onChange={(e) => setSelectedDeviceId(e.target.value ? Number(e.target.value) : null)}
+                  onChange={(e) => {
+                    const id = e.target.value ? Number(e.target.value) : null;
+                    setSelectedDeviceId(id);
+                    setUsedQty(1);
+                  }}
                   className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
                 >
                   <option value="">-- Không sử dụng vật tư kho --</option>
                   {devices.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name} ({d.brand || "N/A"})
+                    <option key={d.id} value={d.id} disabled={d.availableQuantity <= 0}>
+                      {d.name} ({d.brand || "N/A"}) - Còn tồn: {d.availableQuantity}
                     </option>
                   ))}
                 </select>
               </div>
               {selectedDeviceId && (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Số lượng vật tư</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                    Số lượng vật tư (Tối đa: {devices.find((d) => d.id === selectedDeviceId)?.availableQuantity ?? 0})
+                  </label>
                   <input
                     type="number"
+                    min="1"
+                    max={devices.find((d) => d.id === selectedDeviceId)?.availableQuantity ?? 999}
                     value={usedQty}
                     onChange={(e) => setUsedQty(Number(e.target.value))}
                     className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"

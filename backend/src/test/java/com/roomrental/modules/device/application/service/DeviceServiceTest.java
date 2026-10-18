@@ -74,14 +74,17 @@ class DeviceServiceTest {
         });
 
         DeviceResult result = deviceService.create(1L,
-                new DeviceCreateCommand("AC", "Daikin", BigDecimal.valueOf(8000000), LocalDate.now(), 1));
+                new DeviceCreateCommand("AC", "Daikin", BigDecimal.valueOf(8000000), LocalDate.now(), 5));
 
         assertThat(result.name()).isEqualTo("AC");
         assertThat(result.status()).isEqualTo("IN_STOCK");
+        assertThat(result.totalQuantity()).isEqualTo(5);
+        verify(deviceMovementLogJpaRepository).save(argThat(log ->
+                "IMPORT".equals(log.getAction()) && log.getQuantity() == 5));
     }
 
     @Test
-    @DisplayName("UC44: Update device quantity and status")
+    @DisplayName("UC44: Update device general info (totalQuantity and status are locked)")
     void update_success() {
         Device device = new Device();
         device.setId(1L);
@@ -93,13 +96,70 @@ class DeviceServiceTest {
         when(deviceRepository.save(any(Device.class))).thenAnswer(inv -> inv.getArgument(0));
 
         DeviceResult result = deviceService.update(1L, 1L,
-                new DeviceUpdateCommand("AC Updated", "Daikin", BigDecimal.valueOf(8500000), LocalDate.now(), null, 10));
+                new DeviceUpdateCommand("AC Updated", "Daikin", BigDecimal.valueOf(8500000), LocalDate.now()));
 
-        assertThat(result.totalQuantity()).isEqualTo(10);
+        assertThat(result.name()).isEqualTo("AC Updated");
+        assertThat(result.totalQuantity()).isEqualTo(5);
     }
 
     @Test
-    @DisplayName("UC45: Soft delete")
+    @DisplayName("Stock Import: Increment total quantity and log")
+    void importStock_success() {
+        Device device = new Device();
+        device.setId(1L);
+        device.setMotelId(1L);
+        device.setStatus(DeviceStatus.IN_STOCK);
+        device.setTotalQuantity(5);
+        when(motelRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(motel));
+        when(deviceRepository.findByIdAndMotelId(1L, 1L)).thenReturn(Optional.of(device));
+        when(deviceRepository.save(any(Device.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DeviceResult result = deviceService.importStock(1L, 1L,
+                new com.roomrental.modules.device.application.dto.DeviceImportCommand(3, "Nhập thêm 3 chiếc"));
+
+        assertThat(result.totalQuantity()).isEqualTo(8);
+        verify(deviceMovementLogJpaRepository).save(argThat(log ->
+                "IMPORT".equals(log.getAction()) && log.getQuantity() == 3));
+    }
+
+    @Test
+    @DisplayName("Stock Dispose: Decrement total quantity and log")
+    void disposeStock_success() {
+        Device device = new Device();
+        device.setId(1L);
+        device.setMotelId(1L);
+        device.setStatus(DeviceStatus.IN_STOCK);
+        device.setTotalQuantity(5);
+        when(motelRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(motel));
+        when(deviceRepository.findByIdAndMotelId(1L, 1L)).thenReturn(Optional.of(device));
+        when(deviceRepository.save(any(Device.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        DeviceResult result = deviceService.disposeStock(1L, 1L,
+                new com.roomrental.modules.device.application.dto.DeviceDisposeCommand(2, "Hỏng linh kiện không sửa được"));
+
+        assertThat(result.totalQuantity()).isEqualTo(3);
+        verify(deviceMovementLogJpaRepository).save(argThat(log ->
+                "DISPOSE".equals(log.getAction()) && log.getQuantity() == 2));
+    }
+
+    @Test
+    @DisplayName("Stock Dispose: Exceed available quantity throws error")
+    void disposeStock_exceedAvailable_throwsError() {
+        Device device = new Device();
+        device.setId(1L);
+        device.setMotelId(1L);
+        device.setStatus(DeviceStatus.IN_STOCK);
+        device.setTotalQuantity(3);
+        when(motelRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(motel));
+        when(deviceRepository.findByIdAndMotelId(1L, 1L)).thenReturn(Optional.of(device));
+
+        assertThatThrownBy(() -> deviceService.disposeStock(1L, 1L,
+                new com.roomrental.modules.device.application.dto.DeviceDisposeCommand(5, "Quá số lượng tồn")))
+                .isInstanceOf(BaseException.class);
+    }
+
+    @Test
+    @DisplayName("UC45: Soft delete - success when not in use")
     void delete_success() {
         Device device = new Device();
         device.setId(1L);
@@ -111,5 +171,94 @@ class DeviceServiceTest {
 
         deviceService.delete(1L, 1L);
         verify(deviceRepository).save(argThat(Device::isDeleted));
+    }
+
+    @Test
+    @DisplayName("UC47: Full recall deletes usage and logs movement")
+    void recall_fullRecall_success() {
+        Device device = new Device();
+        device.setId(1L);
+        device.setMotelId(1L);
+        device.setStatus(DeviceStatus.IN_STOCK);
+        device.setTotalQuantity(5);
+
+        com.roomrental.modules.device.infrastructure.entity.DeviceUsageEntity usage =
+                new com.roomrental.modules.device.infrastructure.entity.DeviceUsageEntity();
+        usage.setId(10L);
+        usage.setDeviceId(1L);
+        usage.setRoomId(101L);
+        usage.setAssignedQuantity(3);
+
+        when(motelRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(motel));
+        when(deviceRepository.findByIdAndMotelId(1L, 1L)).thenReturn(Optional.of(device));
+        when(deviceUsageJpaRepository.findByDeviceIdAndRoomId(1L, 101L)).thenReturn(Optional.of(usage));
+        when(deviceUsageJpaRepository.findByDeviceId(1L)).thenReturn(List.of());
+
+        deviceService.recallDeviceFromRoom(1L, 1L, 101L,
+                new com.roomrental.modules.device.application.dto.DeviceRecallCommand(3, "Thu hồi toàn bộ"));
+
+        verify(deviceUsageJpaRepository).delete(usage);
+        verify(deviceMovementLogJpaRepository).save(argThat(log ->
+                "RECALL".equals(log.getAction()) && log.getQuantity() == 3 && Long.valueOf(101L).equals(log.getFromRoomId())));
+    }
+
+    @Test
+    @DisplayName("UC47: Partial recall decrements assigned quantity and logs movement")
+    void recall_partialRecall_success() {
+        Device device = new Device();
+        device.setId(1L);
+        device.setMotelId(1L);
+        device.setStatus(DeviceStatus.IN_STOCK);
+        device.setTotalQuantity(5);
+
+        com.roomrental.modules.device.infrastructure.entity.DeviceUsageEntity usage =
+                new com.roomrental.modules.device.infrastructure.entity.DeviceUsageEntity();
+        usage.setId(10L);
+        usage.setDeviceId(1L);
+        usage.setRoomId(101L);
+        usage.setAssignedQuantity(3);
+
+        when(motelRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(motel));
+        when(deviceRepository.findByIdAndMotelId(1L, 1L)).thenReturn(Optional.of(device));
+        when(deviceUsageJpaRepository.findByDeviceIdAndRoomId(1L, 101L)).thenReturn(Optional.of(usage));
+        when(deviceUsageJpaRepository.findByDeviceId(1L)).thenReturn(List.of(usage));
+
+        deviceService.recallDeviceFromRoom(1L, 1L, 101L,
+                new com.roomrental.modules.device.application.dto.DeviceRecallCommand(1, "Thu hồi 1 chiếc"));
+
+        verify(deviceUsageJpaRepository, never()).delete(any());
+        verify(deviceUsageJpaRepository).save(argThat(u -> u.getAssignedQuantity() == 2));
+        verify(deviceMovementLogJpaRepository).save(argThat(log ->
+                "RECALL".equals(log.getAction()) && log.getQuantity() == 1 && Long.valueOf(101L).equals(log.getFromRoomId())));
+    }
+
+    @Test
+    @DisplayName("UC46: Assign device to room with optional condition defaults to GOOD")
+    void assign_defaultCondition_success() {
+        Device device = new Device();
+        device.setId(1L);
+        device.setMotelId(1L);
+        device.setName("Tủ lạnh");
+        device.setStatus(DeviceStatus.IN_STOCK);
+        device.setTotalQuantity(5);
+
+        com.roomrental.modules.room.domain.model.Room room = new com.roomrental.modules.room.domain.model.Room();
+        room.setId(101L);
+        room.setMotelId(1L);
+
+        when(motelRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(motel));
+        when(deviceRepository.findByIdAndMotelId(1L, 1L)).thenReturn(Optional.of(device));
+        when(roomRepository.findByIdAndMotelId(101L, 1L)).thenReturn(Optional.of(room));
+        when(deviceUsageJpaRepository.findByDeviceId(1L)).thenReturn(List.of());
+        when(deviceUsageJpaRepository.findByDeviceIdAndRoomId(1L, 101L)).thenReturn(Optional.empty());
+        when(deviceUsageJpaRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        com.roomrental.modules.device.application.dto.DeviceUsageResult result = deviceService.assignDeviceToRoom(
+                1L, 1L, new com.roomrental.modules.device.application.dto.DeviceAssignCommand(101L, 2, null, "Gán 2 cái"));
+
+        assertThat(result.assignedQuantity()).isEqualTo(2);
+        assertThat(result.condition()).isEqualTo("GOOD");
+        verify(deviceMovementLogJpaRepository).save(argThat(log ->
+                "ASSIGN".equals(log.getAction()) && log.getQuantity() == 2 && Long.valueOf(101L).equals(log.getToRoomId())));
     }
 }

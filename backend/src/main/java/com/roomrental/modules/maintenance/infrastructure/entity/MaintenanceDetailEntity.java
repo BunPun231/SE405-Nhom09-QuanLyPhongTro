@@ -17,7 +17,7 @@ public class MaintenanceDetailEntity {
     @Column(name = "ticket_id", nullable = false)
     private Long ticketId;
 
-    @Column(name = "device_id", nullable = false)
+    @Column(name = "device_id")
     private Long deviceId;
 
     @Column(name = "quantity_used", nullable = false)

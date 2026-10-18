@@ -9,8 +9,9 @@ export interface DeviceResponse {
   purchaseDate?: string;
   totalQuantity: number;
   inUseQuantity: number;
+  repairingQuantity: number;
   availableQuantity: number;
-  status: "IN_STOCK" | "IN_USE" | "BROKEN" | "REPAIRING";
+  status: "IN_STOCK" | "IN_USE";
 }
 
 export interface DeviceUsageResponse {
@@ -30,7 +31,8 @@ export interface DeviceMovementLogResponse {
   deviceId: number;
   fromRoomId?: number;
   toRoomId?: number;
-  action: "ASSIGN" | "RECALL";
+  action: "ASSIGN" | "RECALL" | "IMPORT" | "DISPOSE" | "MAINTENANCE_USE" | "SEND_TO_REPAIR" | "FINISH_REPAIR";
+  quantity: number;
   changedBy: string;
   timestamp: string;
   note?: string;
@@ -49,8 +51,6 @@ export interface UpdateDeviceRequest {
   brand?: string;
   purchasePrice?: number;
   purchaseDate?: string;
-  status?: string;
-  totalQuantity?: number;
 }
 
 export interface AssignDeviceRequest {
@@ -88,9 +88,21 @@ export const deviceService = {
     return res.data.data;
   },
 
-  /** UC44 - Update device */
+  /** UC44 - Update device general info (name, brand, price, date) */
   async updateDevice(motelId: number, deviceId: number, body: UpdateDeviceRequest): Promise<DeviceResponse> {
     const res = await api.patch<{ data: DeviceResponse }>(`/api/motels/${motelId}/devices/${deviceId}`, body);
+    return res.data.data;
+  },
+
+  /** Import more devices to stock */
+  async importStock(motelId: number, deviceId: number, body: { quantity: number; note?: string }): Promise<DeviceResponse> {
+    const res = await api.post<{ data: DeviceResponse }>(`/api/motels/${motelId}/devices/${deviceId}/import`, body);
+    return res.data.data;
+  },
+
+  /** Dispose / report broken devices from stock */
+  async disposeStock(motelId: number, deviceId: number, body: { quantity: number; reason?: string }): Promise<DeviceResponse> {
+    const res = await api.post<{ data: DeviceResponse }>(`/api/motels/${motelId}/devices/${deviceId}/dispose`, body);
     return res.data.data;
   },
 
@@ -112,13 +124,31 @@ export const deviceService = {
   },
 
   /** UC47 - Recall device from room */
-  async recallDevice(motelId: number, deviceId: number, roomId: number, note?: string): Promise<void> {
-    await api.post(`/api/motels/${motelId}/devices/${deviceId}/recall`, { note }, { params: { roomId } });
+  async recallDevice(
+    motelId: number,
+    deviceId: number,
+    roomId: number,
+    body?: { quantity?: number; note?: string } | string
+  ): Promise<void> {
+    const payload = typeof body === "string" ? { note: body } : body;
+    await api.post(`/api/motels/${motelId}/devices/${deviceId}/recall`, payload, { params: { roomId } });
   },
 
   /** Get movement history */
   async getMovementLogs(motelId: number, deviceId: number): Promise<DeviceMovementLogResponse[]> {
     const res = await api.get<{ data: DeviceMovementLogResponse[] }>(`/api/motels/${motelId}/devices/${deviceId}/movement-logs`);
+    return res.data.data;
+  },
+
+  /** Send devices to repair workshop */
+  async sendToRepair(motelId: number, deviceId: number, body: { quantity: number; note?: string }): Promise<DeviceResponse> {
+    const res = await api.post<{ data: DeviceResponse }>(`/api/motels/${motelId}/devices/${deviceId}/send-to-repair`, body);
+    return res.data.data;
+  },
+
+  /** Mark repaired devices as returned to stock */
+  async finishRepair(motelId: number, deviceId: number, body: { quantity: number; note?: string }): Promise<DeviceResponse> {
+    const res = await api.post<{ data: DeviceResponse }>(`/api/motels/${motelId}/devices/${deviceId}/finish-repair`, body);
     return res.data.data;
   }
 };

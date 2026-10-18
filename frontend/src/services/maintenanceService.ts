@@ -20,6 +20,7 @@ export interface MaintenanceDetailResponse {
 
 export interface MaintenanceTicketResponse {
   id: number;
+  motelId?: number;
   roomId: number;
   roomNumber: string;
   reportedBy: string;
