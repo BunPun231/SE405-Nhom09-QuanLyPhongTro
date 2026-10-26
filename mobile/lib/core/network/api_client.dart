@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+const _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+
 /// ApiClient hoạt động giống hệt api.ts của Frontend:
 /// - Attach JWT Bearer token vào Header Authorization
 /// - Attach X-Tenant-Id header giống tenantStore
@@ -12,13 +14,17 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ApiClient {
   /// URL Backend Spring Boot — giống VITE_API_BASE_URL
   static String get baseUrl {
+    if (_configuredBaseUrl.isNotEmpty) {
+      return _configuredBaseUrl.replaceFirst(RegExp(r'/$'), '');
+    }
     if (kIsWeb) return 'http://localhost:8080';
     if (Platform.isAndroid) return 'http://10.0.2.2:8080';
     return 'http://localhost:8080'; // iOS Simulator / macOS
   }
 
   static const String _tenantHeader = 'X-Tenant-Id'; // giống VITE_TENANT_HEADER
-  static const Duration _timeout = Duration(seconds: 30); // giống axios timeout: 30000
+  static const Duration _timeout =
+      Duration(seconds: 30); // giống axios timeout: 30000
 
   // Session state (giống authStore + tenantStore của Zustand)
   static String? _accessToken;
@@ -37,7 +43,8 @@ class ApiClient {
   }
 
   /// Lưu session sau khi login thành công (giống authStore.login)
-  static Future<void> setSession({required String accessToken, String? tenantId, String? userId}) async {
+  static Future<void> setSession(
+      {required String accessToken, String? tenantId, String? userId}) async {
     _accessToken = accessToken;
     _tenantId = tenantId;
     _userId = userId;
@@ -148,51 +155,69 @@ class ApiClient {
 
   // ─── HTTP Methods ─────────────────────────────────────
 
-  static Future<dynamic> get(String endpoint, {Map<String, String>? headers, Map<String, dynamic>? params}) async {
+  static Future<dynamic> get(String endpoint,
+      {Map<String, String>? headers, Map<String, dynamic>? params}) async {
     var uri = Uri.parse('$baseUrl$endpoint');
     if (params != null && params.isNotEmpty) {
-      uri = uri.replace(queryParameters: params.map((k, v) => MapEntry(k, v.toString())));
+      uri = uri.replace(
+          queryParameters: params.map((k, v) => MapEntry(k, v.toString())));
     }
-    final response = await http.get(uri, headers: _buildHeaders(headers)).timeout(_timeout);
+    final response =
+        await http.get(uri, headers: _buildHeaders(headers)).timeout(_timeout);
     return _processResponse(response);
   }
 
-  static Future<dynamic> post(String endpoint, {dynamic body, Map<String, String>? headers, Map<String, dynamic>? params}) async {
+  static Future<dynamic> post(String endpoint,
+      {dynamic body,
+      Map<String, String>? headers,
+      Map<String, dynamic>? params}) async {
     var uri = Uri.parse('$baseUrl$endpoint');
     if (params != null && params.isNotEmpty) {
-      uri = uri.replace(queryParameters: params.map((k, v) => MapEntry(k, v.toString())));
+      uri = uri.replace(
+          queryParameters: params.map((k, v) => MapEntry(k, v.toString())));
     }
-    final response = await http.post(
-      uri,
-      headers: _buildHeaders(headers),
-      body: body != null ? jsonEncode(body) : null,
-    ).timeout(_timeout);
+    final response = await http
+        .post(
+          uri,
+          headers: _buildHeaders(headers),
+          body: body != null ? jsonEncode(body) : null,
+        )
+        .timeout(_timeout);
     return _processResponse(response);
   }
 
-  static Future<dynamic> put(String endpoint, {dynamic body, Map<String, String>? headers}) async {
+  static Future<dynamic> put(String endpoint,
+      {dynamic body, Map<String, String>? headers}) async {
     final uri = Uri.parse('$baseUrl$endpoint');
-    final response = await http.put(
-      uri,
-      headers: _buildHeaders(headers),
-      body: body != null ? jsonEncode(body) : null,
-    ).timeout(_timeout);
+    final response = await http
+        .put(
+          uri,
+          headers: _buildHeaders(headers),
+          body: body != null ? jsonEncode(body) : null,
+        )
+        .timeout(_timeout);
     return _processResponse(response);
   }
 
-  static Future<dynamic> patch(String endpoint, {dynamic body, Map<String, String>? headers}) async {
+  static Future<dynamic> patch(String endpoint,
+      {dynamic body, Map<String, String>? headers}) async {
     final uri = Uri.parse('$baseUrl$endpoint');
-    final response = await http.patch(
-      uri,
-      headers: _buildHeaders(headers),
-      body: body != null ? jsonEncode(body) : null,
-    ).timeout(_timeout);
+    final response = await http
+        .patch(
+          uri,
+          headers: _buildHeaders(headers),
+          body: body != null ? jsonEncode(body) : null,
+        )
+        .timeout(_timeout);
     return _processResponse(response);
   }
 
-  static Future<dynamic> delete(String endpoint, {Map<String, String>? headers}) async {
+  static Future<dynamic> delete(String endpoint,
+      {Map<String, String>? headers}) async {
     final uri = Uri.parse('$baseUrl$endpoint');
-    final response = await http.delete(uri, headers: _buildHeaders(headers)).timeout(_timeout);
+    final response = await http
+        .delete(uri, headers: _buildHeaders(headers))
+        .timeout(_timeout);
     return _processResponse(response);
   }
 }

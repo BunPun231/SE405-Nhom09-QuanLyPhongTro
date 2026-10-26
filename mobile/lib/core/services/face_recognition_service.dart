@@ -14,6 +14,7 @@ class FaceRecognitionService {
   static const int INPUT_SIZE = 112;
   static const int EMBEDDING_SIZE = 192;
   static const double THRESHOLD = 0.8;
+  static Map<String, Map<String, dynamic>>? _registeredFacesCache;
 
   static Future<void> initialize() async {
     if (_interpreter != null) return;
@@ -122,9 +123,21 @@ class FaceRecognitionService {
     final data =
         json.encode({'userId': userId, 'name': name, 'embedding': embedding});
     await prefs.setString('face_$userId', data);
+    _registeredFacesCache ??= {};
+    _registeredFacesCache!['face_$userId'] = {
+      'userId': userId,
+      'name': name,
+      'embedding': embedding,
+    };
   }
 
-  static Future<Map<String, Map<String, dynamic>>> getRegisteredFaces() async {
+  static Future<Map<String, Map<String, dynamic>>> getRegisteredFaces({
+    bool forceRefresh = false,
+  }) async {
+    if (!forceRefresh && _registeredFacesCache != null) {
+      return _registeredFacesCache!;
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final keys = prefs.getKeys().where((k) => k.startsWith('face_'));
     Map<String, Map<String, dynamic>> faces = {};
@@ -136,6 +149,7 @@ class FaceRecognitionService {
         } catch (_) {}
       }
     }
+    _registeredFacesCache = faces;
     return faces;
   }
 
@@ -143,18 +157,35 @@ class FaceRecognitionService {
       List<double> embedding) async {
     final registered = await getRegisteredFaces();
     double maxSim = 0.0;
+    double bestDistance = double.infinity;
     Map<String, dynamic>? bestMatch;
     for (final entry in registered.values) {
       List<double> stored = List<double>.from(entry['embedding']);
       double sim = calculateCosineSimilarity(embedding, stored);
+      final distance = calculateEuclideanDistance(embedding, stored);
       if (sim > maxSim) {
         maxSim = sim;
+        bestDistance = distance;
         bestMatch = entry;
       }
     }
+
     if (maxSim >= THRESHOLD && bestMatch != null) {
-      return {...bestMatch, 'similarity': maxSim};
+      debugPrint(
+        '[FACE SCAN RESULT] Matched: '
+        '${bestMatch['name'] ?? bestMatch['userId'] ?? 'Unknown'} '
+        '(Distance: ${bestDistance.toStringAsFixed(6)})',
+      );
+      return {
+        ...bestMatch,
+        'similarity': maxSim,
+        'distance': bestDistance,
+      };
     }
+    debugPrint(
+      '[FACE SCAN RESULT] Unknown Person '
+      '(Best Distance: ${bestDistance.toStringAsFixed(6)})',
+    );
     return null;
   }
 
@@ -169,7 +200,16 @@ class FaceRecognitionService {
   }
 
   static Future<void> preloadFaces() async {
-    final faces = await getRegisteredFaces();
-    debugPrint('[Kiosk] Loaded ${faces.length} registered faces');
+    await getRegisteredFaces(forceRefresh: true);
+  }
+
+  static double calculateEuclideanDistance(List<double> a, List<double> b) {
+    if (a.length != b.length || a.isEmpty) return double.infinity;
+    var sum = 0.0;
+    for (var i = 0; i < a.length; i++) {
+      final difference = a[i] - b[i];
+      sum += difference * difference;
+    }
+    return sqrt(sum);
   }
 }

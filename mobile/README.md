@@ -32,6 +32,11 @@
 ## 🚀 Cấu trúc dự án Flutter (`lib/`)
 
 ```
+
+`API_BASE_URL` mặc định là `10.0.2.2:8080` cho Android Emulator. Khi dùng
+điện thoại thật, thay `192.168.1.x` bằng IPv4 Wi-Fi của máy tính chạy Backend.
+Backend phải lắng nghe trên `0.0.0.0:8080` và tường lửa Windows phải cho phép
+kết nối TCP đến cổng 8080.
 lib/
 ├── main.dart                      # Entry point ứng dụng
 ├── core/
@@ -76,6 +81,9 @@ flutter run -t lib/main.dart
 
 # App Kiosk Gate Scanner
 flutter run -t lib/main_gate.dart
+
+# Chạy Kiosk trên điện thoại thật cùng Wi-Fi với máy chạy Backend
+flutter run -t lib/main_gate.dart --dart-define=API_BASE_URL=http://<IP_MAY_TINH>:8080
 
 # Build APK riêng biệt
 flutter build apk --release -t lib/main.dart
