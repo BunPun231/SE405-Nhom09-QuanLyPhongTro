@@ -7,11 +7,10 @@ import 'package:camera/camera.dart';
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 class FaceRecognitionService {
   static Interpreter? _interpreter;
-  static const String MODEL_PATH = 'assets/models/mobilefacenet.tflite';
+  static const String MODEL_PATH = 'assets/models/mobile_face_net.tflite';
   static const int INPUT_SIZE = 112;
   static const int EMBEDDING_SIZE = 192;
   static const double THRESHOLD = 0.8;
@@ -30,14 +29,17 @@ class FaceRecognitionService {
     required Rect faceBoundingBox,
   }) async {
     await initialize();
-    if (_interpreter == null) throw Exception('TFLite interpreter not initialized');
+    if (_interpreter == null) {
+      throw Exception('TFLite interpreter not initialized');
+    }
 
     final Float32List input = await compute(_preprocessImageIsolate, {
       'cameraImage': cameraImage,
       'boundingBox': faceBoundingBox,
     });
 
-    var output = List.filled(1 * EMBEDDING_SIZE, 0.0).reshape([1, EMBEDDING_SIZE]);
+    var output =
+        List.filled(1 * EMBEDDING_SIZE, 0.0).reshape([1, EMBEDDING_SIZE]);
     _interpreter!.run([input], output);
     return List<double>.from(output[0]);
   }
@@ -46,7 +48,8 @@ class FaceRecognitionService {
     CameraImage cameraImage = params['cameraImage'];
     Rect box = params['boundingBox'];
 
-    img.Image rgbImage = img.Image(width: cameraImage.width, height: cameraImage.height);
+    img.Image rgbImage =
+        img.Image(width: cameraImage.width, height: cameraImage.height);
     if (cameraImage.format.group == ImageFormatGroup.bgra8888) {
       rgbImage = img.Image.fromBytes(
         width: cameraImage.width,
@@ -60,13 +63,16 @@ class FaceRecognitionService {
       final vPlane = cameraImage.planes[2];
       for (int y = 0; y < cameraImage.height; y++) {
         for (int x = 0; x < cameraImage.width; x++) {
-          final uvIndex = (uPlane.bytesPerPixel! * (x / 2).floor()) + (uPlane.bytesPerRow * (y / 2).floor());
+          final uvIndex = (uPlane.bytesPerPixel! * (x / 2).floor()) +
+              (uPlane.bytesPerRow * (y / 2).floor());
           final index = y * cameraImage.width + x;
           final yp = yPlane.bytes[index];
           final up = uPlane.bytes[uvIndex];
           final vp = vPlane.bytes[uvIndex];
           int r = (yp + vp * 1436 / 1024 - 179).round().clamp(0, 255);
-          int g = (yp - up * 46549 / 131072 + 44 - vp * 93604 / 131072 + 91).round().clamp(0, 255);
+          int g = (yp - up * 46549 / 131072 + 44 - vp * 93604 / 131072 + 91)
+              .round()
+              .clamp(0, 255);
           int b = (yp + up * 1814 / 1024 - 227).round().clamp(0, 255);
           rgbImage.setPixelRgba(x, y, r, g, b, 255);
         }
@@ -79,7 +85,8 @@ class FaceRecognitionService {
     int h = box.height.toInt().clamp(1, rgbImage.height - y);
 
     img.Image cropped = img.copyCrop(rgbImage, x: x, y: y, width: w, height: h);
-    img.Image resized = img.copyResize(cropped, width: INPUT_SIZE, height: INPUT_SIZE);
+    img.Image resized =
+        img.copyResize(cropped, width: INPUT_SIZE, height: INPUT_SIZE);
 
     Float32List normalized = Float32List(INPUT_SIZE * INPUT_SIZE * 3);
     int idx = 0;
@@ -112,7 +119,8 @@ class FaceRecognitionService {
     required List<double> embedding,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    final data = json.encode({'userId': userId, 'name': name, 'embedding': embedding});
+    final data =
+        json.encode({'userId': userId, 'name': name, 'embedding': embedding});
     await prefs.setString('face_$userId', data);
   }
 
@@ -131,7 +139,8 @@ class FaceRecognitionService {
     return faces;
   }
 
-  static Future<Map<String, dynamic>?> recognizeFace(List<double> embedding) async {
+  static Future<Map<String, dynamic>?> recognizeFace(
+      List<double> embedding) async {
     final registered = await getRegisteredFaces();
     double maxSim = 0.0;
     Map<String, dynamic>? bestMatch;
@@ -147,5 +156,20 @@ class FaceRecognitionService {
       return {...bestMatch, 'similarity': maxSim};
     }
     return null;
+  }
+
+  static Future<bool> hasRegisteredFaces() async {
+    final faces = await getRegisteredFaces();
+    return faces.isNotEmpty;
+  }
+
+  static Future<int> getRegisteredFacesCount() async {
+    final faces = await getRegisteredFaces();
+    return faces.length;
+  }
+
+  static Future<void> preloadFaces() async {
+    final faces = await getRegisteredFaces();
+    debugPrint('[Kiosk] Loaded ${faces.length} registered faces');
   }
 }

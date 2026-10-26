@@ -71,3 +71,12 @@ lib/
    ```bash
    flutter run
    ```
+# App chính (Manager/Tenant)
+flutter run -t lib/main.dart
+
+# App Kiosk Gate Scanner
+flutter run -t lib/main_gate.dart
+
+# Build APK riêng biệt
+flutter build apk --release -t lib/main.dart
+flutter build apk --release -t lib/main_gate.dart
