@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:intl/intl.dart';
@@ -19,6 +18,7 @@ class _GateAccessScanScreenState extends State<GateAccessScanScreen> {
   List<_FaceResult> _results = [];
   bool _isProcessingFrame = false;
   bool _hasCompletedFaceScan = false;
+  DateTime _lastProcessedAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -38,10 +38,28 @@ class _GateAccessScanScreenState extends State<GateAccessScanScreen> {
     setState(() {});
     _controller!.startImageStream((image) async {
       if (_isProcessingFrame) return;
+      if (DateTime.now().difference(_lastProcessedAt) <
+          const Duration(milliseconds: 200)) {
+        return;
+      }
+      _lastProcessedAt = DateTime.now();
       _isProcessingFrame = true;
       try {
-        final inputImage = _toInputImage(image);
+        final inputImage = FaceDetectorService.fromCameraImage(
+          image: image,
+          camera: _cameraDescription!,
+          deviceOrientation: _controller!.value.deviceOrientation,
+        );
         final faces = await FaceDetectorService.detectFaces(inputImage);
+        if (faces.isEmpty) {
+          if (mounted) {
+            setState(() {
+              _results = [];
+              _hasCompletedFaceScan = false;
+            });
+          }
+          return;
+        }
         List<_FaceResult> results = [];
         for (final face in faces) {
           final embedding = await FaceRecognitionService.extractEmbedding(
@@ -63,38 +81,6 @@ class _GateAccessScanScreenState extends State<GateAccessScanScreen> {
         _isProcessingFrame = false;
       }
     });
-  }
-
-  InputImageRotation _inputImageRotation() {
-    switch (_cameraDescription?.sensorOrientation) {
-      case 90:
-        return InputImageRotation.rotation90deg;
-      case 180:
-        return InputImageRotation.rotation180deg;
-      case 270:
-        return InputImageRotation.rotation270deg;
-      case 0:
-      default:
-        return InputImageRotation.rotation0deg;
-    }
-  }
-
-  InputImage _toInputImage(CameraImage img) {
-    final bytes = img.planes.fold<Uint8List>(Uint8List(0), (p, plane) {
-      final c = Uint8List(p.length + plane.bytes.length);
-      c.setRange(0, p.length, p);
-      c.setRange(p.length, c.length, plane.bytes);
-      return c;
-    });
-    return InputImage.fromBytes(
-      bytes: bytes,
-      metadata: InputImageMetadata(
-        size: Size(img.width.toDouble(), img.height.toDouble()),
-        rotation: _inputImageRotation(),
-        format: InputImageFormat.nv21,
-        bytesPerRow: img.planes[0].bytesPerRow,
-      ),
-    );
   }
 
   @override
@@ -136,8 +122,14 @@ class _GateAccessScanScreenState extends State<GateAccessScanScreen> {
               const Center(child: CircularProgressIndicator()),
             if (_controller?.value.isInitialized ?? false)
               CustomPaint(
-                painter: _Painter(_results, _controller!.value.previewSize!,
-                    MediaQuery.of(context).size, _inputImageRotation()),
+                painter: _Painter(
+                    _results,
+                    _controller!.value.previewSize!,
+                    MediaQuery.of(context).size,
+                    FaceDetectorService.rotationForCamera(
+                      _cameraDescription!,
+                      _controller!.value.deviceOrientation,
+                    )),
               ),
             Positioned(
               top: widget.kioskMode ? 60 : 20,

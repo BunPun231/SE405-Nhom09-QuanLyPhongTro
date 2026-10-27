@@ -15,12 +15,19 @@ class FaceRecognitionService {
   static const int EMBEDDING_SIZE = 192;
   static const double THRESHOLD = 0.8;
   static Map<String, Map<String, dynamic>>? _registeredFacesCache;
+  static Future<void>? _initialization;
 
   static Future<void> initialize() async {
     if (_interpreter != null) return;
+    _initialization ??= _loadInterpreter();
+    await _initialization;
+  }
+
+  static Future<void> _loadInterpreter() async {
     try {
       _interpreter = await Interpreter.fromAsset(MODEL_PATH);
     } catch (e) {
+      _initialization = null;
       debugPrint('Error loading TFLite model: $e');
     }
   }
@@ -64,12 +71,16 @@ class FaceRecognitionService {
       final vPlane = cameraImage.planes[2];
       for (int y = 0; y < cameraImage.height; y++) {
         for (int x = 0; x < cameraImage.width; x++) {
-          final uvIndex = (uPlane.bytesPerPixel! * (x / 2).floor()) +
-              (uPlane.bytesPerRow * (y / 2).floor());
-          final index = y * cameraImage.width + x;
-          final yp = yPlane.bytes[index];
-          final up = uPlane.bytes[uvIndex];
-          final vp = vPlane.bytes[uvIndex];
+          final yIndex = y * yPlane.bytesPerRow + x;
+          final chromaX = x ~/ 2;
+          final chromaY = y ~/ 2;
+          final uIndex = chromaY * uPlane.bytesPerRow +
+              chromaX * (uPlane.bytesPerPixel ?? 1);
+          final vIndex = chromaY * vPlane.bytesPerRow +
+              chromaX * (vPlane.bytesPerPixel ?? 1);
+          final yp = yPlane.bytes[yIndex];
+          final up = uPlane.bytes[uIndex];
+          final vp = vPlane.bytes[vIndex];
           int r = (yp + vp * 1436 / 1024 - 179).round().clamp(0, 255);
           int g = (yp - up * 46549 / 131072 + 44 - vp * 93604 / 131072 + 91)
               .round()

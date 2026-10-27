@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import '../../../../core/services/face_detector_service.dart';
@@ -8,7 +7,8 @@ import '../../../../core/services/face_recognition_service.dart';
 class FaceRegisterScreen extends StatefulWidget {
   final String userId;
   final String userName;
-  const FaceRegisterScreen({super.key, required this.userId, required this.userName});
+  const FaceRegisterScreen(
+      {super.key, required this.userId, required this.userName});
 
   @override
   State<FaceRegisterScreen> createState() => _FaceRegisterScreenState();
@@ -16,9 +16,13 @@ class FaceRegisterScreen extends StatefulWidget {
 
 class _FaceRegisterScreenState extends State<FaceRegisterScreen> {
   CameraController? _controller;
+  CameraDescription? _cameraDescription;
   List<Face> _detectedFaces = [];
   bool _isProcessing = false;
   CameraImage? _lastCameraImage;
+  int _frameSequence = 0;
+  int? _lastDetectedFrame;
+  DateTime _lastProcessedAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
@@ -29,7 +33,10 @@ class _FaceRegisterScreenState extends State<FaceRegisterScreen> {
 
   Future<void> _initCamera() async {
     final cameras = await availableCameras();
-    final front = cameras.firstWhere((c) => c.lensDirection == CameraLensDirection.front, orElse: () => cameras.first);
+    final front = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cameras.first);
+    _cameraDescription = front;
     _controller = CameraController(front, ResolutionPreset.medium);
     await _controller!.initialize();
     if (!mounted) return;
@@ -37,36 +44,42 @@ class _FaceRegisterScreenState extends State<FaceRegisterScreen> {
 
     _controller!.startImageStream((image) async {
       if (_isProcessing) return;
+      if (DateTime.now().difference(_lastProcessedAt) <
+          const Duration(milliseconds: 200)) {
+        return;
+      }
+      _lastProcessedAt = DateTime.now();
       _isProcessing = true;
       _lastCameraImage = image;
+      final frameId = ++_frameSequence;
 
-      final inputImage = _inputImageFromCameraImage(image);
-      final faces = await FaceDetectorService.detectFaces(inputImage);
-      if (mounted) setState(() => _detectedFaces = faces);
-      _isProcessing = false;
+      try {
+        final inputImage = FaceDetectorService.fromCameraImage(
+          image: image,
+          camera: _cameraDescription!,
+          deviceOrientation: _controller!.value.deviceOrientation,
+        );
+        final faces = await FaceDetectorService.detectFaces(inputImage);
+        if (faces.isEmpty) {
+          _lastCameraImage = null;
+          _lastDetectedFrame = null;
+          if (mounted) setState(() => _detectedFaces = []);
+          return;
+        }
+        _lastDetectedFrame = frameId;
+        if (mounted) setState(() => _detectedFaces = faces);
+      } finally {
+        _isProcessing = false;
+      }
     });
-  }
-
-  InputImage _inputImageFromCameraImage(CameraImage image) {
-    final bytes = image.planes.fold<Uint8List>(Uint8List(0), (prev, plane) {
-      final combined = Uint8List(prev.length + plane.bytes.length);
-      combined.setRange(0, prev.length, prev);
-      combined.setRange(prev.length, combined.length, plane.bytes);
-      return combined;
-    });
-    return InputImage.fromBytes(
-      bytes: bytes,
-      metadata: InputImageMetadata(
-        size: Size(image.width.toDouble(), image.height.toDouble()),
-        rotation: InputImageRotation.rotation0deg,
-        format: InputImageFormat.nv21,
-        bytesPerRow: image.planes[0].bytesPerRow,
-      ),
-    );
   }
 
   Future<void> _register() async {
-    if (_detectedFaces.isEmpty || _lastCameraImage == null) return;
+    if (_detectedFaces.isEmpty ||
+        _lastCameraImage == null ||
+        _lastDetectedFrame == null) {
+      return;
+    }
     setState(() => _isProcessing = true);
     try {
       final embedding = await FaceRecognitionService.extractEmbedding(
@@ -78,12 +91,16 @@ class _FaceRegisterScreenState extends State<FaceRegisterScreen> {
         name: widget.userName,
         embedding: embedding,
       );
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Đăng ký khuôn mặt thành công!')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đăng ký khuôn mặt thành công!')));
       Navigator.pop(context, true);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Lỗi: $e')));
+      }
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -109,7 +126,8 @@ class _FaceRegisterScreenState extends State<FaceRegisterScreen> {
             left: 20,
             right: 20,
             child: ElevatedButton.icon(
-              onPressed: _detectedFaces.isEmpty || _isProcessing ? null : _register,
+              onPressed:
+                  _detectedFaces.isEmpty || _isProcessing ? null : _register,
               icon: const Icon(Icons.camera_alt),
               label: const Text('Xác nhận đăng ký'),
             ),
