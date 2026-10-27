@@ -25,10 +25,19 @@ class FaceRecognitionService {
 
   static Future<void> _loadInterpreter() async {
     try {
+      print('[TFLITE] Loading interpreter from $MODEL_PATH');
       _interpreter = await Interpreter.fromAsset(MODEL_PATH);
+      final interpreter = _interpreter!;
+      print(
+        '[TFLITE] Interpreter ready: '
+        'inputs=${interpreter.getInputTensors().map((t) => '${t.name} shape=${t.shape} type=${t.type}').join('; ')} '
+        'outputs=${interpreter.getOutputTensors().map((t) => '${t.name} shape=${t.shape} type=${t.type}').join('; ')}',
+      );
     } catch (e) {
       _initialization = null;
-      debugPrint('Error loading TFLite model: $e');
+      print('[TFLITE ERROR] Failed to load interpreter: $e');
+      print(StackTrace.current);
+      rethrow;
     }
   }
 
@@ -37,8 +46,21 @@ class FaceRecognitionService {
     required Rect faceBoundingBox,
   }) async {
     await initialize();
-    if (_interpreter == null) {
+    final interpreter = _interpreter;
+    if (interpreter == null) {
+      print(
+          '[TFLITE ERROR] extractEmbedding called before interpreter was ready');
       throw Exception('TFLite interpreter not initialized');
+    }
+    if (faceBoundingBox.isEmpty ||
+        !faceBoundingBox.left.isFinite ||
+        !faceBoundingBox.top.isFinite ||
+        !faceBoundingBox.width.isFinite ||
+        !faceBoundingBox.height.isFinite ||
+        faceBoundingBox.width <= 0 ||
+        faceBoundingBox.height <= 0) {
+      print('[TFLITE ERROR] Invalid face bounding box: $faceBoundingBox');
+      throw StateError('Invalid face bounding box');
     }
 
     final Float32List input = await compute(_preprocessImageIsolate, {
@@ -46,9 +68,39 @@ class FaceRecognitionService {
       'boundingBox': faceBoundingBox,
     });
 
-    var output =
-        List.filled(1 * EMBEDDING_SIZE, 0.0).reshape([1, EMBEDDING_SIZE]);
-    _interpreter!.run([input], output);
+    final inputTensor = interpreter.getInputTensor(0);
+    final outputTensor = interpreter.getOutputTensor(0);
+    final inputShape = inputTensor.shape;
+    final outputShape = outputTensor.shape;
+    print(
+      '[TFLITE INPUT] shape=$inputShape type=${inputTensor.type} '
+      'values=${input.length} expected=${inputShape.fold<int>(1, (a, b) => a * b)}',
+    );
+    print(
+      '[TFLITE OUTPUT] shape=$outputShape type=${outputTensor.type}',
+    );
+
+    final expectedInputValues = inputShape.fold<int>(1, (a, b) => a * b);
+    if (inputTensor.type != TensorType.float32 ||
+        inputShape.length != 4 ||
+        inputShape[0] != 1 ||
+        inputShape[1] != INPUT_SIZE ||
+        inputShape[2] != INPUT_SIZE ||
+        inputShape[3] != 3 ||
+        input.length != expectedInputValues) {
+      throw StateError(
+        'Unexpected TFLite input: shape=$inputShape type=${inputTensor.type} '
+        'values=${input.length}',
+      );
+    }
+
+    final modelInput = input.toList().reshape<double>(inputShape);
+    final outputValues = outputShape.fold<int>(1, (a, b) => a * b);
+    final output =
+        List<double>.filled(outputValues, 0.0).reshape<double>(outputShape);
+    print('[TFLITE] Running inference');
+    interpreter.run(modelInput, output);
+    print('[TFLITE] Inference completed');
     return List<double>.from(output[0]);
   }
 

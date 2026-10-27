@@ -78,13 +78,27 @@ class _FaceRegisterScreenState extends State<FaceRegisterScreen> {
     if (_detectedFaces.isEmpty ||
         _lastCameraImage == null ||
         _lastDetectedFrame == null) {
+      print(
+        '[FACE REGISTER] Cannot register: '
+        'faces=${_detectedFaces.length}, '
+        'hasImage=${_lastCameraImage != null}, '
+        'detectedFrame=$_lastDetectedFrame',
+      );
       return;
     }
+    final face = _detectedFaces.first;
+    final cameraImage = _lastCameraImage!;
+    print(
+      '[FACE REGISTER] Starting: frame=$_lastDetectedFrame '
+      'faces=${_detectedFaces.length} '
+      'image=${cameraImage.width}x${cameraImage.height} '
+      'box=${face.boundingBox}',
+    );
     setState(() => _isProcessing = true);
     try {
       final embedding = await FaceRecognitionService.extractEmbedding(
-        cameraImage: _lastCameraImage!,
-        faceBoundingBox: _detectedFaces.first.boundingBox,
+        cameraImage: cameraImage,
+        faceBoundingBox: face.boundingBox,
       );
       await FaceRecognitionService.registerFace(
         userId: widget.userId,
@@ -94,7 +108,9 @@ class _FaceRegisterScreenState extends State<FaceRegisterScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Đăng ký khuôn mặt thành công!')));
       Navigator.pop(context, true);
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('[FACE REGISTER ERROR] $e');
+      print(stackTrace);
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('Lỗi: $e')));
