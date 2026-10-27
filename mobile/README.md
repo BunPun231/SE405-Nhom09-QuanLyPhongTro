@@ -76,15 +76,28 @@ lib/
    ```bash
    flutter run
    ```
-# App chính (Manager/Tenant)
-flutter run -t lib/main.dart
+### Hai Android app độc lập (product flavors)
 
-# App Kiosk Gate Scanner
-flutter run -t lib/main_gate.dart
+Flavor `manager` dùng entrypoint quản lý (`lib/main.dart`), application ID
+`com.example.room_rental_mobile`, tên hiển thị **QL Nhà Trọ**. Flavor `gate`
+dùng entrypoint kiosk (`lib/main_gate.dart`), application ID
+`com.example.room_rental_mobile.gate`, tên hiển thị **Kiosk Cổng**.
 
-# Chạy Kiosk trên điện thoại thật cùng Wi-Fi với máy chạy Backend
-flutter run -t lib/main_gate.dart --dart-define=API_BASE_URL=http://<IP_MAY_TINH>:8080
+```bash
+# Chạy app quản lý
+flutter run --flavor manager -t lib/main.dart
 
-# Build APK riêng biệt
-flutter build apk --release -t lib/main.dart
-flutter build apk --release -t lib/main_gate.dart
+# Chạy kiosk (mặc định camera trước)
+flutter run --flavor gate -t lib/main_gate.dart
+
+# Chạy kiosk trên điện thoại thật cùng Wi-Fi với Backend
+flutter run --flavor gate -t lib/main_gate.dart --dart-define=API_BASE_URL=http://<IP_MAY_TINH>:8080
+
+# Build hai APK độc lập
+flutter build apk --release --flavor manager -t lib/main.dart
+flutter build apk --release --flavor gate -t lib/main_gate.dart
+```
+
+Màn hình đăng ký khuôn mặt mặc định dùng camera sau; màn hình kiosk mặc định
+dùng camera trước. Nút `flip_camera_android` ở góc trên cho phép đổi camera
+trong lúc demo hoặc bảo trì.

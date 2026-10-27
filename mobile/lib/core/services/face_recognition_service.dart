@@ -63,9 +63,23 @@ class FaceRecognitionService {
       throw StateError('Invalid face bounding box');
     }
 
+    final imageBounds = Rect.fromLTWH(
+      0,
+      0,
+      cameraImage.width.toDouble(),
+      cameraImage.height.toDouble(),
+    );
+    final sourceBox = faceBoundingBox.intersect(imageBounds);
+    if (sourceBox.isEmpty) {
+      throw StateError(
+        'Face bounding box is outside the source image: $faceBoundingBox',
+      );
+    }
+
     final Float32List input = await compute(_preprocessImageIsolate, {
       'cameraImage': cameraImage,
-      'boundingBox': faceBoundingBox,
+      // This is deliberately the ML Kit/source-image box, never the UI box.
+      'boundingBox': sourceBox,
     });
 
     final inputTensor = interpreter.getInputTensor(0);

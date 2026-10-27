@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:typed_data';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -145,20 +146,30 @@ class FaceDetectorService {
     required Size imageSize,
     required Size screenSize,
     required InputImageRotation rotation,
+    bool mirrorX = false,
   }) {
-    // Coordinate transformation logic for camera preview overlay
-    double scaleX = screenSize.width / imageSize.height;
-    double scaleY = screenSize.height / imageSize.width;
-
-    final boundingBox = face.boundingBox;
-
-    // Adjust based on rotation/mirroring if needed
-    double left = boundingBox.left * scaleX;
-    double top = boundingBox.top * scaleY;
-    double right = boundingBox.right * scaleX;
-    double bottom = boundingBox.bottom * scaleY;
-
-    return Rect.fromLTRB(left, top, right, bottom);
+    final isQuarterTurn = rotation == InputImageRotation.rotation90deg ||
+        rotation == InputImageRotation.rotation270deg;
+    final orientedSize =
+        isQuarterTurn ? Size(imageSize.height, imageSize.width) : imageSize;
+    final scale = max(
+      screenSize.width / orientedSize.width,
+      screenSize.height / orientedSize.height,
+    );
+    final offsetX = (orientedSize.width * scale - screenSize.width) / 2;
+    final offsetY = (orientedSize.height * scale - screenSize.height) / 2;
+    final box = face.boundingBox;
+    final left = box.left * scale - offsetX;
+    final right = box.right * scale - offsetX;
+    final top = box.top * scale - offsetY;
+    final bottom = box.bottom * scale - offsetY;
+    if (!mirrorX) return Rect.fromLTRB(left, top, right, bottom);
+    return Rect.fromLTRB(
+      screenSize.width - right,
+      top,
+      screenSize.width - left,
+      bottom,
+    );
   }
 
   static void dispose() {

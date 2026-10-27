@@ -19,6 +19,8 @@ class _GateAccessScanScreenState extends State<GateAccessScanScreen> {
   bool _isProcessingFrame = false;
   bool _hasCompletedFaceScan = false;
   DateTime _lastProcessedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastFaceDetectedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  Rect? _overlayBox;
 
   @override
   void initState() {
@@ -30,31 +32,45 @@ class _GateAccessScanScreenState extends State<GateAccessScanScreen> {
   Future<void> _initCamera() async {
     final cameras = await availableCameras();
     if (cameras.isEmpty) return;
-    _cameraDescription = cameras.first;
-    _controller =
-        CameraController(_cameraDescription!, ResolutionPreset.medium);
-    await _controller!.initialize();
+    final front = cameras.firstWhere(
+      (camera) => camera.lensDirection == CameraLensDirection.front,
+      orElse: () => cameras.first,
+    );
+    await _startCamera(front);
+  }
+
+  Future<void> _startCamera(CameraDescription camera) async {
+    _cameraDescription = camera;
+    final controller = CameraController(camera, ResolutionPreset.medium);
+    _controller = controller;
+    await controller.initialize();
     if (!mounted) return;
     setState(() {});
-    _controller!.startImageStream((image) async {
+    await controller.startImageStream((image) async {
+      if (!mounted || controller != _controller) return;
       if (_isProcessingFrame) return;
       if (DateTime.now().difference(_lastProcessedAt) <
-          const Duration(milliseconds: 200)) {
+          const Duration(milliseconds: 90)) {
         return;
       }
       _lastProcessedAt = DateTime.now();
       _isProcessingFrame = true;
       try {
+        final camera = _cameraDescription;
+        if (camera == null) return;
         final inputImage = FaceDetectorService.fromCameraImage(
           image: image,
-          camera: _cameraDescription!,
-          deviceOrientation: _controller!.value.deviceOrientation,
+          camera: camera,
+          deviceOrientation: controller.value.deviceOrientation,
         );
         final faces = await FaceDetectorService.detectFaces(inputImage);
         if (faces.isEmpty) {
-          if (mounted) {
+          if (mounted &&
+              DateTime.now().difference(_lastFaceDetectedAt) >
+                  const Duration(milliseconds: 300)) {
             setState(() {
               _results = [];
+              _overlayBox = null;
               _hasCompletedFaceScan = false;
             });
           }
@@ -70,6 +86,18 @@ class _GateAccessScanScreenState extends State<GateAccessScanScreen> {
           results.add(_FaceResult(face, match));
         }
         if (mounted) {
+          final newBox = FaceDetectorService.scaleBoundingBox(
+            face: faces.first,
+            imageSize: Size(image.width.toDouble(), image.height.toDouble()),
+            screenSize: MediaQuery.sizeOf(context),
+            rotation: FaceDetectorService.rotationForCamera(
+              camera,
+              controller.value.deviceOrientation,
+            ),
+            mirrorX: camera.lensDirection == CameraLensDirection.front,
+          );
+          _overlayBox = _smoothBox(newBox);
+          _lastFaceDetectedAt = DateTime.now();
           setState(() {
             _results = results;
             _hasCompletedFaceScan = faces.isNotEmpty;
@@ -81,6 +109,35 @@ class _GateAccessScanScreenState extends State<GateAccessScanScreen> {
         _isProcessingFrame = false;
       }
     });
+  }
+
+  Rect _smoothBox(Rect next) {
+    final previous = _overlayBox;
+    if (previous == null) return next;
+    const factor = 0.35;
+    return Rect.fromLTRB(
+      previous.left + (next.left - previous.left) * factor,
+      previous.top + (next.top - previous.top) * factor,
+      previous.right + (next.right - previous.right) * factor,
+      previous.bottom + (next.bottom - previous.bottom) * factor,
+    );
+  }
+
+  Future<void> _switchCamera() async {
+    final cameras = await availableCameras();
+    if (cameras.length < 2 || _cameraDescription == null) return;
+    final target = cameras.firstWhere(
+      (camera) => camera.lensDirection != _cameraDescription!.lensDirection,
+      orElse: () => cameras.first,
+    );
+    final oldController = _controller;
+    _controller = null;
+    _results = [];
+    _overlayBox = null;
+    if (mounted) setState(() {});
+    await oldController?.stopImageStream();
+    await oldController?.dispose();
+    if (mounted) await _startCamera(target);
   }
 
   @override
@@ -117,20 +174,30 @@ class _GateAccessScanScreenState extends State<GateAccessScanScreen> {
         body: Stack(
           children: [
             if (_controller?.value.isInitialized ?? false)
-              CameraPreview(_controller!)
+              Positioned.fill(
+                child: _FullScreenCameraPreview(controller: _controller!),
+              )
             else
               const Center(child: CircularProgressIndicator()),
             if (_controller?.value.isInitialized ?? false)
-              CustomPaint(
-                painter: _Painter(
-                    _results,
-                    _controller!.value.previewSize!,
-                    MediaQuery.of(context).size,
-                    FaceDetectorService.rotationForCamera(
-                      _cameraDescription!,
-                      _controller!.value.deviceOrientation,
-                    )),
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _Painter(_results, _overlayBox),
+                ),
               ),
+            Positioned(
+              top: widget.kioskMode ? 12 : 8,
+              right: 12,
+              child: IconButton(
+                onPressed: _switchCamera,
+                color: Colors.white,
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black54,
+                ),
+                icon: const Icon(Icons.flip_camera_android),
+                tooltip: 'Đổi camera',
+              ),
+            ),
             Positioned(
               top: widget.kioskMode ? 60 : 20,
               left: 20,
@@ -185,6 +252,27 @@ class _GateAccessScanScreenState extends State<GateAccessScanScreen> {
   }
 }
 
+class _FullScreenCameraPreview extends StatelessWidget {
+  final CameraController controller;
+  const _FullScreenCameraPreview({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final previewSize = controller.value.previewSize;
+    if (previewSize == null) return CameraPreview(controller);
+    return SizedBox.expand(
+      child: FittedBox(
+        fit: BoxFit.cover,
+        child: SizedBox(
+          width: previewSize.height,
+          height: previewSize.width,
+          child: CameraPreview(controller),
+        ),
+      ),
+    );
+  }
+}
+
 class _FaceResult {
   final Face face;
   final Map<String, dynamic>? match;
@@ -193,17 +281,14 @@ class _FaceResult {
 
 class _Painter extends CustomPainter {
   final List<_FaceResult> results;
-  final Size imgSize, screenSize;
-  final InputImageRotation rotation;
-  _Painter(this.results, this.imgSize, this.screenSize, this.rotation);
+  final Rect? overlayBox;
+  _Painter(this.results, this.overlayBox);
   @override
   void paint(Canvas canvas, Size size) {
-    for (final r in results) {
-      final rect = FaceDetectorService.scaleBoundingBox(
-          face: r.face,
-          imageSize: imgSize,
-          screenSize: screenSize,
-          rotation: rotation);
+    for (var index = 0; index < results.length; index++) {
+      final r = results[index];
+      final rect = index == 0 ? overlayBox : null;
+      if (rect == null) continue;
       canvas.drawRect(
           rect,
           Paint()
