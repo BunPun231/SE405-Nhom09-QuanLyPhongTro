@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/services/contract_service.dart';
+import '../../../core/network/api_client.dart';
+import 'face_register_screen.dart';
 
 class TenantProfileScreen extends StatefulWidget {
   final VoidCallback? onLogout;
@@ -45,7 +47,9 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
 
   String get _avatarLetter {
     final parts = _fullName.trim().split(' ');
-    return parts.isNotEmpty && parts.last.isNotEmpty ? parts.last[0].toUpperCase() : 'T';
+    return parts.isNotEmpty && parts.last.isNotEmpty
+        ? parts.last[0].toUpperCase()
+        : 'T';
   }
 
   void _showChangePasswordSheet() {
@@ -64,7 +68,8 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModalState) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          padding:
+              EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
           child: Container(
             decoration: const BoxDecoration(
               color: Colors.white,
@@ -75,30 +80,51 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(2)))),
+                Center(
+                    child: Container(
+                        width: 40,
+                        height: 4,
+                        decoration: BoxDecoration(
+                            color: const Color(0xFFE2E8F0),
+                            borderRadius: BorderRadius.circular(2)))),
                 const SizedBox(height: 16),
-                const Text('Đổi mật khẩu', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                const Text('Đổi mật khẩu',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1E293B))),
                 const SizedBox(height: 4),
-                const Text('Mật khẩu mới tối thiểu 6 ký tự', style: TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
+                const Text('Mật khẩu mới tối thiểu 6 ký tự',
+                    style: TextStyle(
+                        fontSize: 12, color: AppColors.textSecondaryLight)),
                 const SizedBox(height: 16),
                 if (errorMsg != null)
                   Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(color: AppColors.danger.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-                    child: Text(errorMsg!, style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+                    decoration: BoxDecoration(
+                        color: AppColors.danger.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10)),
+                    child: Text(errorMsg!,
+                        style: const TextStyle(
+                            color: AppColors.danger, fontSize: 12)),
                   ),
                 TextField(
                   controller: oldPwdCtrl,
                   obscureText: obscureOld,
                   decoration: InputDecoration(
                     labelText: 'Mật khẩu hiện tại',
-                    prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                    prefixIcon:
+                        const Icon(Icons.lock_outline_rounded, size: 20),
                     suffixIcon: IconButton(
-                      icon: Icon(obscureOld ? Icons.visibility_off : Icons.visibility, size: 20),
-                      onPressed: () => setModalState(() => obscureOld = !obscureOld),
+                      icon: Icon(
+                          obscureOld ? Icons.visibility_off : Icons.visibility,
+                          size: 20),
+                      onPressed: () =>
+                          setModalState(() => obscureOld = !obscureOld),
                     ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -109,10 +135,14 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
                     labelText: 'Mật khẩu mới',
                     prefixIcon: const Icon(Icons.lock_reset_rounded, size: 20),
                     suffixIcon: IconButton(
-                      icon: Icon(obscureNew ? Icons.visibility_off : Icons.visibility, size: 20),
-                      onPressed: () => setModalState(() => obscureNew = !obscureNew),
+                      icon: Icon(
+                          obscureNew ? Icons.visibility_off : Icons.visibility,
+                          size: 20),
+                      onPressed: () =>
+                          setModalState(() => obscureNew = !obscureNew),
                     ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -121,12 +151,19 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
                   obscureText: obscureConfirm,
                   decoration: InputDecoration(
                     labelText: 'Xác nhận mật khẩu mới',
-                    prefixIcon: const Icon(Icons.check_circle_outline_rounded, size: 20),
+                    prefixIcon: const Icon(Icons.check_circle_outline_rounded,
+                        size: 20),
                     suffixIcon: IconButton(
-                      icon: Icon(obscureConfirm ? Icons.visibility_off : Icons.visibility, size: 20),
-                      onPressed: () => setModalState(() => obscureConfirm = !obscureConfirm),
+                      icon: Icon(
+                          obscureConfirm
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                          size: 20),
+                      onPressed: () =>
+                          setModalState(() => obscureConfirm = !obscureConfirm),
                     ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -141,15 +178,18 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
                             final conf = confirmPwdCtrl.text.trim();
 
                             if (oldP.isEmpty || newP.isEmpty) {
-                              setModalState(() => errorMsg = 'Vui lòng nhập đầy đủ thông tin');
+                              setModalState(() =>
+                                  errorMsg = 'Vui lòng nhập đầy đủ thông tin');
                               return;
                             }
                             if (newP.length < 6) {
-                              setModalState(() => errorMsg = 'Mật khẩu mới phải từ 6 ký tự');
+                              setModalState(() =>
+                                  errorMsg = 'Mật khẩu mới phải từ 6 ký tự');
                               return;
                             }
                             if (newP != conf) {
-                              setModalState(() => errorMsg = 'Xác nhận mật khẩu không khớp');
+                              setModalState(() =>
+                                  errorMsg = 'Xác nhận mật khẩu không khớp');
                               return;
                             }
 
@@ -167,13 +207,17 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
                               if (mounted) {
                                 Navigator.pop(ctx);
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Đổi mật khẩu thành công!'), backgroundColor: AppColors.success),
+                                  const SnackBar(
+                                      content: Text('Đổi mật khẩu thành công!'),
+                                      backgroundColor: AppColors.success),
                                 );
                               }
                             } catch (e) {
                               setModalState(() {
                                 isSubmitting = false;
-                                errorMsg = e.toString().replaceFirst('Exception: ', '');
+                                errorMsg = e
+                                    .toString()
+                                    .replaceFirst('Exception: ', '');
                               });
                             }
                           },
@@ -181,11 +225,18 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
                     ),
                     child: isSubmitting
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : const Text('Lưu mật khẩu mới', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                                color: Colors.white, strokeWidth: 2))
+                        : const Text('Lưu mật khẩu mới',
+                            style: TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 15)),
                   ),
                 ),
               ],
@@ -201,16 +252,21 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Đăng xuất?', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: const Text('Bạn có chắc chắn muốn đăng xuất khỏi tài khoản khách thuê?'),
+        title: const Text('Đăng xuất?',
+            style: TextStyle(fontWeight: FontWeight.bold)),
+        content: const Text(
+            'Bạn có chắc chắn muốn đăng xuất khỏi tài khoản khách thuê?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Hủy')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Hủy')),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
               widget.onLogout?.call();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.danger,
+                foregroundColor: Colors.white),
             child: const Text('Đăng xuất'),
           ),
         ],
@@ -231,7 +287,10 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: const Color(0xFFF1F5F9)),
             boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4)),
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4)),
             ],
           ),
           child: Column(
@@ -241,24 +300,34 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
                 backgroundColor: AppColors.primary,
                 child: Text(
                   _avatarLetter,
-                  style: const TextStyle(fontSize: 32, color: Colors.white, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      fontSize: 32,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(height: 12),
               Text(
                 _fullName,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B)),
               ),
               const SizedBox(height: 4),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   '$_roomInfo • Khách thuê',
-                  style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600),
                 ),
               ),
             ],
@@ -274,7 +343,10 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: const Color(0xFFF1F5F9)),
             boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 3)),
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3)),
             ],
           ),
           child: Column(
@@ -294,9 +366,18 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
                 subtitle: 'Hóa đơn, nhắc hạn đóng tiền, bảo trì',
                 onTap: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Tính năng thông báo đang kích hoạt')),
+                    const SnackBar(
+                        content: Text('Tính năng thông báo đang kích hoạt')),
                   );
                 },
+              ),
+              const Divider(height: 1, indent: 60),
+              _buildTile(
+                icon: Icons.face_retouching_natural_rounded,
+                color: const Color(0xFF0EA5E9),
+                title: 'Đăng ký khuôn mặt',
+                subtitle: 'Dùng khuôn mặt để mở cổng',
+                onTap: _openFaceRegistration,
               ),
             ],
           ),
@@ -311,7 +392,10 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
             borderRadius: BorderRadius.circular(18),
             border: Border.all(color: const Color(0xFFF1F5F9)),
             boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 3)),
+              BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3)),
             ],
           ),
           child: _buildTile(
@@ -331,7 +415,29 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
       padding: const EdgeInsets.only(left: 4, bottom: 8),
       child: Text(
         title,
-        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF374151)),
+        style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+            color: Color(0xFF374151)),
+      ),
+    );
+  }
+
+  Future<void> _openFaceRegistration() async {
+    final userId = ApiClient.userId;
+    if (userId == null || userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Không xác định được tài khoản hiện tại')),
+      );
+      return;
+    }
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FaceRegisterScreen(
+          userId: userId,
+          userName: _fullName,
+        ),
       ),
     );
   }
@@ -356,7 +462,9 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
               Container(
                 width: 40,
                 height: 40,
-                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+                decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12)),
                 child: Icon(icon, color: color, size: 20),
               ),
               const SizedBox(width: 14),
@@ -364,13 +472,20 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Color(0xFF1E293B))),
+                    Text(title,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: Color(0xFF1E293B))),
                     const SizedBox(height: 2),
-                    Text(subtitle, style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight)),
+                    Text(subtitle,
+                        style: const TextStyle(
+                            fontSize: 11, color: AppColors.textSecondaryLight)),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textSecondaryLight),
+              const Icon(Icons.chevron_right_rounded,
+                  size: 18, color: AppColors.textSecondaryLight),
             ],
           ),
         ),

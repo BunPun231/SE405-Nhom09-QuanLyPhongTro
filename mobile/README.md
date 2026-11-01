@@ -32,6 +32,11 @@
 ## 🚀 Cấu trúc dự án Flutter (`lib/`)
 
 ```
+
+`API_BASE_URL` mặc định là `10.0.2.2:8080` cho Android Emulator. Khi dùng
+điện thoại thật, thay `192.168.1.x` bằng IPv4 Wi-Fi của máy tính chạy Backend.
+Backend phải lắng nghe trên `0.0.0.0:8080` và tường lửa Windows phải cho phép
+kết nối TCP đến cổng 8080.
 lib/
 ├── main.dart                      # Entry point ứng dụng
 ├── core/
@@ -71,3 +76,28 @@ lib/
    ```bash
    flutter run
    ```
+### Hai Android app độc lập (product flavors)
+
+Flavor `manager` dùng entrypoint quản lý (`lib/main.dart`), application ID
+`com.example.room_rental_mobile`, tên hiển thị **QL Nhà Trọ**. Flavor `gate`
+dùng entrypoint kiosk (`lib/main_gate.dart`), application ID
+`com.example.room_rental_mobile.gate`, tên hiển thị **Kiosk Cổng**.
+
+```bash
+# Chạy app quản lý
+flutter run --flavor manager -t lib/main.dart
+
+# Chạy kiosk (mặc định camera trước)
+flutter run --flavor gate -t lib/main_gate.dart
+
+# Chạy kiosk trên điện thoại thật cùng Wi-Fi với Backend
+flutter run --flavor gate -t lib/main_gate.dart --dart-define=API_BASE_URL=http://<IP_MAY_TINH>:8080
+
+# Build hai APK độc lập
+flutter build apk --release --flavor manager -t lib/main.dart
+flutter build apk --release --flavor gate -t lib/main_gate.dart
+```
+
+Màn hình đăng ký khuôn mặt mặc định dùng camera sau; màn hình kiosk mặc định
+dùng camera trước. Nút `flip_camera_android` ở góc trên cho phép đổi camera
+trong lúc demo hoặc bảo trì.
