@@ -216,6 +216,34 @@ class ApiClient {
     return _processResponse(response);
   }
 
+  /// Tải dữ liệu nhị phân (vd. file PDF hợp đồng). Trả về bytes thô.
+  static Future<List<int>> getBytes(
+    String endpoint, {
+    Map<String, dynamic>? params,
+  }) async {
+    var uri = Uri.parse('$baseUrl$endpoint');
+    if (params != null && params.isNotEmpty) {
+      uri = uri.replace(
+        queryParameters: params.map((k, v) => MapEntry(k, v.toString())),
+      );
+    }
+    final headers = _buildHeaders({'Accept': '*/*'});
+    final response = await http.get(uri, headers: headers).timeout(_timeout);
+    if (response.statusCode == 401) {
+      logout();
+      throw Exception('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+    }
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      // Tái dùng cách đọc thông báo lỗi JSON của backend.
+      _processResponse(response);
+    }
+    return response.bodyBytes;
+  }
+
+  /// Chuyển bytes ảnh thành chuỗi base64 để gửi lên các API nhận ảnh dạng base64
+  /// (vd. OCR đồng hồ, OCR CCCD).
+  static String toBase64(List<int> bytes) => base64Encode(bytes);
+
   static Future<dynamic> registerFaceVector({
     required String userId,
     required String name,

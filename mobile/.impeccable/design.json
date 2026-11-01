@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-01T18:19:38Z",
+  "title": "Design System: QL Nhà Trọ",
+  "extensions": {
+    "colorMeta": {
+      "royal-blue":      { "role": "primary",   "displayName": "Xanh hoàng gia",     "canonical": "#2563EB", "tonalRamp": ["#1E3A8A", "#1E40AF", "#1D4ED8", "#2563EB", "#3B82F6", "#60A5FA", "#BFDBFE", "#EFF6FF"] },
+      "confirm-green":   { "role": "secondary", "displayName": "Xanh lá xác nhận",   "canonical": "#059669", "tonalRamp": ["#064E3B", "#065F46", "#047857", "#059669", "#10B981", "#34D399", "#A7F3D0", "#ECFDF5"] },
+      "collected-green": { "role": "tertiary",  "displayName": "Xanh lá đã thu",     "canonical": "#10B981", "tonalRamp": ["#064E3B", "#065F46", "#047857", "#059669", "#10B981", "#34D399", "#A7F3D0", "#ECFDF5"] },
+      "pending-amber":   { "role": "tertiary",  "displayName": "Cam chờ xử lý",      "canonical": "#F59E0B", "tonalRamp": ["#78350F", "#92400E", "#B45309", "#D97706", "#F59E0B", "#FBBF24", "#FDE68A", "#FFFBEB"] },
+      "overdue-red":     { "role": "tertiary",  "displayName": "Đỏ quá hạn",         "canonical": "#EF4444", "tonalRamp": ["#7F1D1D", "#991B1B", "#B91C1C", "#DC2626", "#EF4444", "#F87171", "#FECACA", "#FEF2F2"] },
+      "deposit-violet":  { "role": "tertiary",  "displayName": "Tím đặt cọc",        "canonical": "#8B5CF6", "tonalRamp": ["#4C1D95", "#5B21B6", "#6D28D9", "#7C3AED", "#8B5CF6", "#A78BFA", "#DDD6FE", "#F5F3FF"] },
+      "ink-slate":       { "role": "neutral",   "displayName": "Mực đen xám",        "canonical": "#0F172A", "tonalRamp": ["#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#E2E8F0", "#F8FAFC"] },
+      "heading-slate":   { "role": "neutral",   "displayName": "Xám tiêu đề",        "canonical": "#1E293B", "tonalRamp": ["#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#E2E8F0", "#F8FAFC"] },
+      "muted-slate":     { "role": "neutral",   "displayName": "Xám ghi chú",        "canonical": "#64748B", "tonalRamp": ["#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#E2E8F0", "#F8FAFC"] },
+      "faint-slate":     { "role": "neutral",   "displayName": "Xám mờ",             "canonical": "#94A3B8", "tonalRamp": ["#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#E2E8F0", "#F8FAFC"] },
+      "hairline-slate":  { "role": "neutral",   "displayName": "Xám đường kẻ",       "canonical": "#E2E8F0", "tonalRamp": ["#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#E2E8F0", "#F8FAFC"] },
+      "mist-slate":      { "role": "neutral",   "displayName": "Xám sương",          "canonical": "#F1F5F9", "tonalRamp": ["#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#F1F5F9", "#F8FAFC"] },
+      "paper-slate":     { "role": "neutral",   "displayName": "Nền giấy",           "canonical": "#F8FAFC", "tonalRamp": ["#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#E2E8F0", "#F8FAFC"] },
+      "white":           { "role": "neutral",   "displayName": "Trắng thẻ",          "canonical": "#FFFFFF", "tonalRamp": ["#0F172A", "#1E293B", "#334155", "#475569", "#64748B", "#94A3B8", "#E2E8F0", "#FFFFFF"] }
+    },
+    "typographyMeta": {
+      "headline":    { "displayName": "Headline",    "purpose": "Tiêu đề lớn đầu màn hình tổng quan." },
+      "title-large": { "displayName": "Title Large", "purpose": "Tiêu đề app bar, tiêu đề bottom sheet, giá trị KPI." },
+      "title":       { "displayName": "Title",       "purpose": "Tên mục trong thẻ, như \"Phòng 101\"." },
+      "button":      { "displayName": "Button",      "purpose": "Chữ trên nút." },
+      "body":        { "displayName": "Body",        "purpose": "Nội dung, chữ trong ô nhập, gợi ý, nhãn ô nhập." },
+      "label":       { "displayName": "Label",       "purpose": "Chữ trên chip, dòng phụ trong thẻ, nhãn trong dòng thông tin." },
+      "caption":     { "displayName": "Caption",     "purpose": "Ngày tháng, meta." },
+      "micro":       { "displayName": "Micro",       "purpose": "Nhãn trạng thái, nhãn thanh điều hướng." }
+    },
+    "shadows": [
+      { "name": "card-whisper",   "value": "0 2px 8px rgba(0, 0, 0, 0.04)",     "purpose": "Thẻ nội dung, khối doanh thu." },
+      { "name": "list-card",      "value": "0 4px 10px rgba(0, 0, 0, 0.04)",    "purpose": "Thẻ phòng có thể chạm." },
+      { "name": "nav-lift",       "value": "0 -2px 8px rgba(0, 0, 0, 0.12)",    "purpose": "Tách thanh điều hướng dưới khỏi nội dung." },
+      { "name": "chip-selected",  "value": "0 3px 8px rgba(37, 99, 235, 0.25)", "purpose": "Chỉ cho chip lọc đang chọn." }
+    ],
+    "motion": [
+      { "name": "chip-toggle", "value": "180ms linear", "purpose": "Chip lọc chuyển giữa chọn và chưa chọn (AnimatedContainer)." },
+      { "name": "nav-toggle",  "value": "200ms linear", "purpose": "Mục thanh điều hướng dưới chuyển trạng thái chọn (AnimatedContainer)." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Hành động chính trên màn hình hoặc bottom sheet.",
+      "html": "<button class=\"ds-btn-primary\">Lưu phòng</button>",
+      "css": ".ds-btn-primary { background: #2563EB; color: #FFFFFF; font-family: Roboto, system-ui, sans-serif; font-size: 14px; font-weight: 700; letter-spacing: -0.2px; padding: 14px 20px; border: none; border-radius: 14px; cursor: pointer; transition: background 0.15s; } .ds-btn-primary:hover { background: #1D4ED8; } .ds-btn-primary:active { background: #1E40AF; } .ds-btn-primary:focus-visible { outline: 2px solid #2563EB; outline-offset: 2px; }"
+    },
+    {
+      "name": "Confirm Button",
+      "kind": "button",
+      "refersTo": "button-confirm",
+      "description": "Chỉ cho hành động chốt tiền: duyệt chỉ số, đánh dấu đã thu, thanh toán.",
+      "html": "<button class=\"ds-btn-confirm\"><svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z\"/></svg>Xác nhận đã thu</button>",
+      "css": ".ds-btn-confirm { display: inline-flex; align-items: center; gap: 6px; background: #059669; color: #FFFFFF; font-family: Roboto, system-ui, sans-serif; font-size: 14px; font-weight: 700; letter-spacing: -0.2px; padding: 14px 20px; border: none; border-radius: 14px; cursor: pointer; transition: background 0.15s; } .ds-btn-confirm:hover { background: #047857; } .ds-btn-confirm:active { background: #065F46; } .ds-btn-confirm:focus-visible { outline: 2px solid #059669; outline-offset: 2px; }"
+    },
+    {
+      "name": "Outlined Button",
+      "kind": "button",
+      "refersTo": "button-outlined",
+      "description": "Hành động phụ đứng cạnh nút chính.",
+      "html": "<button class=\"ds-btn-outlined\">Xem chi tiết</button>",
+      "css": ".ds-btn-outlined { background: #FFFFFF; color: #0F172A; font-family: Roboto, system-ui, sans-serif; font-size: 14px; font-weight: 600; padding: 14px 20px; border: 1px solid #E2E8F0; border-radius: 14px; cursor: pointer; transition: background 0.15s, border-color 0.15s; } .ds-btn-outlined:hover { background: #F8FAFC; border-color: #CBD5E1; } .ds-btn-outlined:focus-visible { outline: 2px solid #2563EB; outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Ô nhập theo inputDecorationTheme: nền trắng, viền mảnh, focus xanh hoàng gia.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Chỉ số điện mới</span><input class=\"ds-input\" placeholder=\"Nhập chỉ số (kWh)\"></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 6px; font-family: Roboto, system-ui, sans-serif; } .ds-field-label { font-size: 13px; color: #64748B; } .ds-input { background: #FFFFFF; color: #0F172A; font-family: inherit; font-size: 13px; padding: 14px 16px; border: 1px solid #E2E8F0; border-radius: 14px; outline: none; transition: border-color 0.15s, box-shadow 0.15s; } .ds-input::placeholder { color: #64748B; } .ds-input:focus-visible, .ds-input:focus { border-color: #2563EB; box-shadow: inset 0 0 0 0.5px #2563EB; }"
+    },
+    {
+      "name": "Filter Chip",
+      "kind": "chip",
+      "refersTo": "chip-filter",
+      "description": "Chip lọc trạng thái phòng/hóa đơn; khi chọn thành nền xanh đặc có dấu tích và quầng xanh nhẹ.",
+      "html": "<div class=\"ds-chip-row\"><button class=\"ds-chip ds-chip--selected\"><svg width=\"13\" height=\"13\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z\"/></svg>Tất cả</button><button class=\"ds-chip\">Đang thuê</button><button class=\"ds-chip\">Trống</button></div>",
+      "css": ".ds-chip-row { display: flex; gap: 8px; } .ds-chip { display: inline-flex; align-items: center; gap: 4px; background: #FFFFFF; color: #64748B; font-family: Roboto, system-ui, sans-serif; font-size: 12px; font-weight: 600; padding: 8px 14px; border: 1px solid #E2E8F0; border-radius: 20px; cursor: pointer; transition: background 0.18s, color 0.18s, box-shadow 0.18s; } .ds-chip:hover { border-color: #CBD5E1; } .ds-chip:focus-visible { outline: 2px solid #2563EB; outline-offset: 2px; } .ds-chip--selected { background: #2563EB; color: #FFFFFF; border-color: #2563EB; box-shadow: 0 3px 8px rgba(37, 99, 235, 0.25); } .ds-chip--selected:hover { border-color: #2563EB; }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "Nhãn trạng thái: nền màu trạng thái 10%, chữ đậm cùng màu.",
+      "html": "<div class=\"ds-badge-row\"><span class=\"ds-badge ds-badge--paid\">Đã thanh toán</span><span class=\"ds-badge ds-badge--pending\">Chờ duyệt</span><span class=\"ds-badge ds-badge--overdue\">Quá hạn</span><span class=\"ds-badge ds-badge--deposit\">Đặt cọc</span></div>",
+      "css": ".ds-badge-row { display: flex; flex-wrap: wrap; gap: 8px; } .ds-badge { display: inline-block; font-family: Roboto, system-ui, sans-serif; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 8px; } .ds-badge--paid { background: rgba(16, 185, 129, 0.10); color: #10B981; } .ds-badge--pending { background: rgba(245, 158, 11, 0.10); color: #F59E0B; } .ds-badge--overdue { background: rgba(239, 68, 68, 0.10); color: #EF4444; } .ds-badge--deposit { background: rgba(139, 92, 246, 0.10); color: #8B5CF6; }"
+    },
+    {
+      "name": "Room Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Thẻ phòng trong danh sách: Icon Tile theo màu trạng thái, số phòng đậm, dòng phụ xám, viền mảnh và bóng thoảng.",
+      "html": "<article class=\"ds-room-card\" tabindex=\"0\"><div class=\"ds-icon-tile\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M14 6v15H3v-2h2V3h9v1h5v15h2v2h-4V6h-3zm-4 5v2h2v-2h-2z\"/></svg></div><div class=\"ds-room-text\"><div class=\"ds-room-title\">Phòng 101</div><div class=\"ds-room-sub\">Tầng 1 · 20m² · 2 người</div></div><span class=\"ds-room-badge\">Đang thuê</span></article>",
+      "css": ".ds-room-card { display: flex; align-items: center; gap: 12px; background: #FFFFFF; padding: 16px; border: 1px solid #F1F5F9; border-radius: 16px; box-shadow: 0 4px 10px rgba(0, 0, 0, 0.04); font-family: Roboto, system-ui, sans-serif; cursor: pointer; transition: background 0.15s; } .ds-room-card:hover { background: #F8FAFC; } .ds-room-card:focus-visible { outline: 2px solid #2563EB; outline-offset: 2px; } .ds-icon-tile { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex: none; border-radius: 12px; background: rgba(16, 185, 129, 0.10); color: #10B981; } .ds-room-text { flex: 1; min-width: 0; } .ds-room-title { font-size: 15px; font-weight: 700; color: #1E293B; } .ds-room-sub { margin-top: 2px; font-size: 12px; color: #64748B; } .ds-room-badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 8px; background: rgba(16, 185, 129, 0.10); color: #10B981; }"
+    },
+    {
+      "name": "Bottom Navigation",
+      "kind": "nav",
+      "refersTo": "nav-item-active",
+      "description": "Thanh điều hướng dưới tùy biến, 3–4 mục theo vai trò; mục đang chọn nằm trên viên xanh 8%.",
+      "html": "<nav class=\"ds-bottom-nav\"><button class=\"ds-nav-item ds-nav-item--active\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z\"/></svg><span>Tổng quan</span></button><button class=\"ds-nav-item\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M14 6v15H3v-2h2V3h9v1h5v15h2v2h-4V6h-3zm-4 5v2h2v-2h-2z\"/></svg><span>Phòng trọ</span></button><button class=\"ds-nav-item\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M18 17H6v-2h12v2zm0-4H6v-2h12v2zm0-4H6V7h12v2zM3 22l1.5-1.5L6 22l1.5-1.5L9 22l1.5-1.5L12 22l1.5-1.5L15 22l1.5-1.5L18 22l1.5-1.5L21 22V2l-1.5 1.5L18 2l-1.5 1.5L15 2l-1.5 1.5L12 2l-1.5 1.5L9 2 7.5 3.5 6 2 4.5 3.5 3 2v20z\"/></svg><span>Hóa đơn</span></button><button class=\"ds-nav-item\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"currentColor\" aria-hidden=\"true\"><path d=\"M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z\"/></svg><span>Tài khoản</span></button></nav>",
+      "css": ".ds-bottom-nav { display: flex; justify-content: space-around; background: #FFFFFF; padding: 6px 8px; border-top: 1px solid #E2E8F0; box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.12); font-family: Roboto, system-ui, sans-serif; } .ds-nav-item { display: flex; flex-direction: column; align-items: center; gap: 3px; background: transparent; color: #64748B; font-family: inherit; font-size: 10px; font-weight: 400; padding: 6px 10px; border: none; border-radius: 12px; cursor: pointer; transition: background 0.2s, color 0.2s; } .ds-nav-item:hover { color: #2563EB; } .ds-nav-item:focus-visible { outline: 2px solid #2563EB; outline-offset: 2px; } .ds-nav-item--active { background: rgba(37, 99, 235, 0.08); color: #2563EB; font-weight: 700; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Sổ thu chi gọn gàng",
+    "overview": "App là cuốn sổ thu chi của khu trọ, được giữ ngăn nắp. Nhân vật chính trên mỗi màn hình là con số và trạng thái: tiền phòng, chỉ số điện nước, hóa đơn đã thu hay còn nợ, phòng trống hay đang thuê. Phần còn lại lùi về sau: nền giấy sáng, thẻ trắng viền mảnh, chữ xám cho ghi chú. Màu xuất hiện khi có điều cần báo, như dấu bút đỏ hay dấu tích xanh trong sổ.\n\nCảm giác mong muốn là đáng tin cậy, sáng sủa thoáng đãng, hiện đại và chuyên nghiệp, đủ để chủ trọ yên tâm về tiền và khách thuê thấy minh bạch. Hình khối mềm mại, dễ gần: bo góc lớn, biểu tượng đặt trên nền màu nhạt, bóng đổ gần như vô hình. Mật độ vừa phải, mỗi thẻ là một mục trong sổ.\n\nGiao diện không được giống app miễn phí rối mắt (quảng cáo, banner, bố trí lộn xộn), cũng không giống app mạng xã hội hay game (nhiều màu, hiệu ứng, gradient rực rỡ).",
+    "keyCharacteristics": [
+      "Nền Paper Slate, thẻ trắng viền mảnh, bóng đổ chỉ thoảng qua.",
+      "Một màu hành động duy nhất (Xanh hoàng gia); các màu còn lại đều mang nghĩa trạng thái.",
+      "Trạng thái hiện bằng nền nhạt cộng chữ hoặc biểu tượng đậm cùng màu.",
+      "Bo góc lớn và nhất quán theo bậc: 8 → 10 → 12 → 14 → 16 → 20 → 28.",
+      "Font hệ thống Roboto, chữ đậm cho tiêu đề và con số, xám cho mọi thứ phụ."
+    ],
+    "rules": [
+      { "name": "The Meaning-Only Color Rule", "body": "Ngoài Xanh hoàng gia cho hành động, mỗi màu khác phải mang một nghĩa trạng thái trong bảng trên. Không dùng màu để trang trí hay phân biệt danh mục cho vui mắt.", "section": "colors" },
+      { "name": "The Tint-Not-Fill Rule", "body": "Trạng thái hiện bằng nền pha loãng 8–12% cùng chữ hoặc biểu tượng đậm cùng màu. Nền đặc chỉ dành cho nút chính, nút xác nhận và chip đang chọn.", "section": "colors" },
+      { "name": "The Number-First Rule", "body": "Trong một dòng hoặc thẻ, con số người dùng cần (tiền, chỉ số, số phòng) đậm hơn và lớn hơn nhãn đi kèm. Nhãn luôn ở Xám ghi chú.", "section": "typography" },
+      { "name": "The Whisper Shadow Rule", "body": "Bóng đổ phải gần như không thấy (đen tối đa 4% trên thẻ). Bóng có màu chỉ dành cho trạng thái đang chọn, không bao giờ để trang trí.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do lấy màu từ token (`AppColors`) theo đúng vai trò trong mục Colors, thay vì viết lại mã hex trong từng màn hình.",
+      "Do đặt nội dung trên nền Paper Slate, gói trong thẻ trắng bo 16dp với viền 1dp và bóng đổ đen tối đa 4%.",
+      "Do hiện trạng thái bằng Status Badge hoặc Icon Tile: nền màu trạng thái 10%, chữ hoặc biểu tượng đậm cùng màu.",
+      "Do dùng nút Confirm (Xanh lá xác nhận) cho mọi hành động chốt tiền, và nút Primary cho các hành động chính khác.",
+      "Do giữ đúng bậc bo góc: 8 nhãn, 10 nút biểu tượng, 12 ô biểu tượng, 14 nút và ô nhập, 16 thẻ, 20 chip, 28 bottom sheet.",
+      "Do giữ con số quan trọng (tiền, chỉ số, số phòng) đậm và dễ đọc. Người dùng chính có nhiều chủ trọ trung niên, nên cỡ 10–11sp chỉ dành cho meta phụ."
+    ],
+    "donts": [
+      "Don't thêm banner, khối quảng cáo hay nhiều khối cùng tranh sự chú ý trên một màn hình, kiểu app quản lý miễn phí rối mắt.",
+      "Don't dùng gradient rực rỡ, nhiều màu hay hiệu ứng nhấp nháy kiểu app mạng xã hội hay game. Gradient duy nhất hiện có là khối thao tác nhanh trên trang tổng quan, chuyển từ navy sang slate tối (#1E3A5F → #1E293B).",
+      "Don't dùng màu chỉ để trang trí hay phân loại; mỗi màu ngoài Xanh hoàng gia phải mang nghĩa trạng thái.",
+      "Don't dùng bóng đổ đậm hoặc bóng có màu cho thẻ; bóng màu chỉ cho chip đang chọn.",
+      "Don't dùng Xanh lá xác nhận cho hành động không liên quan đến tiền."
+    ]
+  }
+}
