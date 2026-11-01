@@ -1,39 +1,29 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
 
-/// ApiClient hoạt động giống hệt api.ts của Frontend:
-/// - Attach JWT Bearer token vào Header Authorization
-/// - Attach X-Tenant-Id header giống tenantStore
-/// - Xử lý 401 → Logout (giống response interceptor)
-/// - Parse body: backend trả về { data: T } hoặc raw T
 class ApiClient {
-  /// URL Backend Spring Boot — giống VITE_API_BASE_URL
   static String get baseUrl {
     if (_configuredBaseUrl.isNotEmpty) {
       return _configuredBaseUrl.replaceFirst(RegExp(r'/$'), '');
     }
     if (kIsWeb) return 'http://localhost:8080';
     if (Platform.isAndroid) return 'http://10.0.2.2:8080';
-    return 'http://localhost:8080'; // iOS Simulator / macOS
+    return 'http://localhost:8080';
   }
 
-  static const String _tenantHeader = 'X-Tenant-Id'; // giống VITE_TENANT_HEADER
-  static const Duration _timeout =
-      Duration(seconds: 30); // giống axios timeout: 30000
+  static const String _tenantHeader = 'X-Tenant-Id';
+  static const Duration _timeout = Duration(seconds: 30);
 
-  // Session state (giống authStore + tenantStore của Zustand)
   static String? _accessToken;
   static String? _tenantId;
   static String? _userId;
 
-  // ─── Session Management ────────────────────────────────
-
-  /// Đọc token từ SharedPreferences khi khởi động (giống localStorage.getItem)
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
     _accessToken = prefs.getString('access_token');
@@ -42,9 +32,11 @@ class ApiClient {
     _userId ??= _userIdFromToken(_accessToken);
   }
 
-  /// Lưu session sau khi login thành công (giống authStore.login)
-  static Future<void> setSession(
-      {required String accessToken, String? tenantId, String? userId}) async {
+  static Future<void> setSession({
+    required String accessToken,
+    String? tenantId,
+    String? userId,
+  }) async {
     _accessToken = accessToken;
     _tenantId = tenantId;
     _userId = userId;
@@ -62,7 +54,6 @@ class ApiClient {
     }
   }
 
-  /// Xóa session khi đăng xuất (giống authStore.logout)
   static Future<void> logout() async {
     _accessToken = null;
     _tenantId = null;
@@ -79,7 +70,6 @@ class ApiClient {
   static String? get tenantId => _tenantId;
   static String? get userId => _userId ?? _userIdFromToken(_accessToken);
 
-  /// JWT `sub` is the user UUID — used when prefs do not have user_id yet.
   static String? _userIdFromToken(String? token) {
     if (token == null || token.isEmpty) return null;
     try {
@@ -103,16 +93,13 @@ class ApiClient {
     return null;
   }
 
-  // ─── Request Interceptor (Headers) ────────────────────
-
-  /// Giống api.interceptors.request.use — attach Authorization + X-Tenant-Id
   static Map<String, String> _buildHeaders([Map<String, String>? extra]) {
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     };
     if (_accessToken != null && _accessToken!.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $_accessToken';
+      headers['Authorization'] = 'Bearer ${_accessToken!}';
     }
     if (_tenantId != null && _tenantId!.isNotEmpty) {
       headers[_tenantHeader] = _tenantId!;
@@ -121,28 +108,23 @@ class ApiClient {
     return headers;
   }
 
-  // ─── Response Interceptor ────────────────────────────
-
-  /// Giống api.interceptors.response.use — 401 → logout, extract error message
   static dynamic _processResponse(http.Response response) {
     final status = response.statusCode;
 
     if (status == 401) {
-      logout(); // clear session
+      logout();
       throw Exception('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
     }
 
     if (status >= 200 && status < 300) {
       if (response.body.isEmpty) return null;
       final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-      // Backend có thể trả về { data: T, message: ... } hoặc raw T/PageResponse
       if (decoded is Map<String, dynamic> && decoded.containsKey('data')) {
         return decoded['data'];
       }
       return decoded;
     }
 
-    // Giống extractError() của frontend
     String errorMsg = 'Lỗi kết nối máy chủ ($status)';
     try {
       final decoded = jsonDecode(utf8.decode(response.bodyBytes));
@@ -153,28 +135,33 @@ class ApiClient {
     throw Exception(errorMsg);
   }
 
-  // ─── HTTP Methods ─────────────────────────────────────
-
-  static Future<dynamic> get(String endpoint,
-      {Map<String, String>? headers, Map<String, dynamic>? params}) async {
+  static Future<dynamic> get(
+    String endpoint, {
+    Map<String, String>? headers,
+    Map<String, dynamic>? params,
+  }) async {
     var uri = Uri.parse('$baseUrl$endpoint');
     if (params != null && params.isNotEmpty) {
       uri = uri.replace(
-          queryParameters: params.map((k, v) => MapEntry(k, v.toString())));
+        queryParameters: params.map((k, v) => MapEntry(k, v.toString())),
+      );
     }
     final response =
         await http.get(uri, headers: _buildHeaders(headers)).timeout(_timeout);
     return _processResponse(response);
   }
 
-  static Future<dynamic> post(String endpoint,
-      {dynamic body,
-      Map<String, String>? headers,
-      Map<String, dynamic>? params}) async {
+  static Future<dynamic> post(
+    String endpoint, {
+    dynamic body,
+    Map<String, String>? headers,
+    Map<String, dynamic>? params,
+  }) async {
     var uri = Uri.parse('$baseUrl$endpoint');
     if (params != null && params.isNotEmpty) {
       uri = uri.replace(
-          queryParameters: params.map((k, v) => MapEntry(k, v.toString())));
+        queryParameters: params.map((k, v) => MapEntry(k, v.toString())),
+      );
     }
     final response = await http
         .post(
@@ -186,8 +173,11 @@ class ApiClient {
     return _processResponse(response);
   }
 
-  static Future<dynamic> put(String endpoint,
-      {dynamic body, Map<String, String>? headers}) async {
+  static Future<dynamic> put(
+    String endpoint, {
+    dynamic body,
+    Map<String, String>? headers,
+  }) async {
     final uri = Uri.parse('$baseUrl$endpoint');
     final response = await http
         .put(
@@ -199,8 +189,11 @@ class ApiClient {
     return _processResponse(response);
   }
 
-  static Future<dynamic> patch(String endpoint,
-      {dynamic body, Map<String, String>? headers}) async {
+  static Future<dynamic> patch(
+    String endpoint, {
+    dynamic body,
+    Map<String, String>? headers,
+  }) async {
     final uri = Uri.parse('$baseUrl$endpoint');
     final response = await http
         .patch(
@@ -212,12 +205,63 @@ class ApiClient {
     return _processResponse(response);
   }
 
-  static Future<dynamic> delete(String endpoint,
-      {Map<String, String>? headers}) async {
+  static Future<dynamic> delete(
+    String endpoint, {
+    Map<String, String>? headers,
+  }) async {
     final uri = Uri.parse('$baseUrl$endpoint');
     final response = await http
         .delete(uri, headers: _buildHeaders(headers))
         .timeout(_timeout);
     return _processResponse(response);
+  }
+
+  static Future<dynamic> registerFaceVector({
+    required String userId,
+    required String name,
+    required List<double> embedding,
+  }) async {
+    final payload = {
+      'userId': userId,
+      'name': name,
+      'embedding': embedding,
+    };
+
+    try {
+      return await post('/api/faces/register', body: payload);
+    } on Exception {
+      return await post('/api/faces', body: payload);
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getFaceVectors() async {
+    const endpoints = <String>[
+      '/api/faces',
+      '/api/faces/registered',
+      '/api/faces/list',
+    ];
+
+    for (final endpoint in endpoints) {
+      try {
+        final response = await get(endpoint);
+        final list = response is List ? response : null;
+        if (list != null) {
+          return list
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList();
+        }
+
+        if (response is Map<String, dynamic>) {
+          final payload = response['items'] ?? response['data'];
+          if (payload is List) {
+            return payload
+                .map((item) => Map<String, dynamic>.from(item as Map))
+                .toList();
+          }
+        }
+      } catch (_) {}
+    }
+
+    return const <Map<String, dynamic>>[];
   }
 }

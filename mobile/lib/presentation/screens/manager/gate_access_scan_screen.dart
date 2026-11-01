@@ -26,7 +26,10 @@ class _GateAccessScanScreenState extends State<GateAccessScanScreen> {
   void initState() {
     super.initState();
     _initCamera();
-    FaceRecognitionService.initialize();
+    FaceRecognitionService.initialize().then((_) {
+      if (!mounted) return;
+      FaceRecognitionService.preloadFaces();
+    });
   }
 
   Future<void> _initCamera() async {

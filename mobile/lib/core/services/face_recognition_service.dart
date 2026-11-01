@@ -1,12 +1,15 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
+
+import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart';
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tflite_flutter/tflite_flutter.dart';
+
+import '../network/api_client.dart';
 
 class FaceRecognitionService {
   static Interpreter? _interpreter;
@@ -78,7 +81,6 @@ class FaceRecognitionService {
 
     final Float32List input = await compute(_preprocessImageIsolate, {
       'cameraImage': cameraImage,
-      // This is deliberately the ML Kit/source-image box, never the UI box.
       'boundingBox': sourceBox,
     });
 
@@ -119,8 +121,8 @@ class FaceRecognitionService {
   }
 
   static Float32List _preprocessImageIsolate(Map<String, dynamic> params) {
-    CameraImage cameraImage = params['cameraImage'];
-    Rect box = params['boundingBox'];
+    final CameraImage cameraImage = params['cameraImage'];
+    final Rect box = params['boundingBox'];
 
     img.Image rgbImage =
         img.Image(width: cameraImage.width, height: cameraImage.height);
@@ -157,16 +159,17 @@ class FaceRecognitionService {
       }
     }
 
-    int x = box.left.toInt().clamp(0, rgbImage.width - 1);
-    int y = box.top.toInt().clamp(0, rgbImage.height - 1);
-    int w = box.width.toInt().clamp(1, rgbImage.width - x);
-    int h = box.height.toInt().clamp(1, rgbImage.height - y);
+    final int x = box.left.toInt().clamp(0, rgbImage.width - 1);
+    final int y = box.top.toInt().clamp(0, rgbImage.height - 1);
+    final int w = box.width.toInt().clamp(1, rgbImage.width - x);
+    final int h = box.height.toInt().clamp(1, rgbImage.height - y);
 
-    img.Image cropped = img.copyCrop(rgbImage, x: x, y: y, width: w, height: h);
-    img.Image resized =
+    final img.Image cropped =
+        img.copyCrop(rgbImage, x: x, y: y, width: w, height: h);
+    final img.Image resized =
         img.copyResize(cropped, width: INPUT_SIZE, height: INPUT_SIZE);
 
-    Float32List normalized = Float32List(INPUT_SIZE * INPUT_SIZE * 3);
+    final Float32List normalized = Float32List(INPUT_SIZE * INPUT_SIZE * 3);
     int idx = 0;
     for (int py = 0; py < INPUT_SIZE; py++) {
       for (int px = 0; px < INPUT_SIZE; px++) {
@@ -181,7 +184,9 @@ class FaceRecognitionService {
 
   static double calculateCosineSimilarity(List<double> a, List<double> b) {
     if (a.length != b.length || a.isEmpty) return 0.0;
-    double dot = 0.0, normA = 0.0, normB = 0.0;
+    double dot = 0.0;
+    double normA = 0.0;
+    double normB = 0.0;
     for (int i = 0; i < a.length; i++) {
       dot += a[i] * b[i];
       normA += a[i] * a[i];
@@ -196,9 +201,21 @@ class FaceRecognitionService {
     required String name,
     required List<double> embedding,
   }) async {
+    final payload = {'userId': userId, 'name': name, 'embedding': embedding};
+
+    try {
+      await ApiClient.registerFaceVector(
+        userId: userId,
+        name: name,
+        embedding: embedding,
+      );
+      debugPrint('[FACE SYNC] Registered to backend successfully');
+    } catch (e) {
+      debugPrint('[FACE SYNC] Backend unavailable, local fallback only: $e');
+    }
+
     final prefs = await SharedPreferences.getInstance();
-    final data =
-        json.encode({'userId': userId, 'name': name, 'embedding': embedding});
+    final data = json.encode(payload);
     await prefs.setString('face_$userId', data);
     _registeredFacesCache ??= {};
     _registeredFacesCache!['face_$userId'] = {
@@ -215,9 +232,38 @@ class FaceRecognitionService {
       return _registeredFacesCache!;
     }
 
+    try {
+      final remoteFaces = await ApiClient.getFaceVectors();
+      if (remoteFaces.isNotEmpty) {
+        final remoteMap = <String, Map<String, dynamic>>{};
+        for (final face in remoteFaces) {
+          final userId =
+              (face['userId'] ?? face['id'] ?? face['user_id'])?.toString();
+          final name = face['name']?.toString() ?? 'Unknown';
+          final embedding = (face['embedding'] as List?)
+                  ?.map((item) => (item as num).toDouble())
+                  .toList() ??
+              <double>[];
+          if (userId == null || userId.isEmpty || embedding.isEmpty) continue;
+
+          final key = 'face_$userId';
+          final value = {'userId': userId, 'name': name, 'embedding': embedding};
+          remoteMap[key] = value;
+
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(key, json.encode(value));
+        }
+
+        _registeredFacesCache = remoteMap;
+        return remoteMap;
+      }
+    } catch (e) {
+      debugPrint('[FACE SYNC] Backend sync failed, fallback to local storage: $e');
+    }
+
     final prefs = await SharedPreferences.getInstance();
     final keys = prefs.getKeys().where((k) => k.startsWith('face_'));
-    Map<String, Map<String, dynamic>> faces = {};
+    final Map<String, Map<String, dynamic>> faces = {};
     for (final key in keys) {
       final jsonStr = prefs.getString(key);
       if (jsonStr != null) {
@@ -237,9 +283,9 @@ class FaceRecognitionService {
     double bestDistance = double.infinity;
     Map<String, dynamic>? bestMatch;
     for (final entry in registered.values) {
-      List<double> stored = List<double>.from(entry['embedding']);
-      double sim = calculateCosineSimilarity(embedding, stored);
-      final distance = calculateEuclideanDistance(embedding, stored);
+      final List<double> stored = List<double>.from(entry['embedding']);
+      final double sim = calculateCosineSimilarity(embedding, stored);
+      final double distance = calculateEuclideanDistance(embedding, stored);
       if (sim > maxSim) {
         maxSim = sim;
         bestDistance = distance;
@@ -277,6 +323,10 @@ class FaceRecognitionService {
   }
 
   static Future<void> preloadFaces() async {
+    await getRegisteredFaces(forceRefresh: true);
+  }
+
+  static Future<void> syncFacesFromBackend() async {
     await getRegisteredFaces(forceRefresh: true);
   }
 
