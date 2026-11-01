@@ -8,5 +8,12 @@ public record MeterReadingSubmitCommand(
     Long serviceId,
     LocalDate billingMonth,
     BigDecimal newReading,
-    String readingImageUrl
-) {}
+    String readingImageUrl,
+    byte[] imageBytes,
+    String mimeType
+) {
+    public MeterReadingSubmitCommand(Long roomId, Long serviceId, LocalDate billingMonth,
+                                     BigDecimal newReading, String readingImageUrl) {
+        this(roomId, serviceId, billingMonth, newReading, readingImageUrl, null, null);
+    }
+}

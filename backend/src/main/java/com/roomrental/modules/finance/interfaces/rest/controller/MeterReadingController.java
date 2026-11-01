@@ -13,7 +13,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Base64;
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import com.roomrental.common.util.HashidsCodec;
 import com.roomrental.common.exception.BaseException;
 
@@ -45,9 +47,17 @@ public class MeterReadingController {
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN', 'RESIDENT')")
     @Operation(summary = "Submit a meter reading manually (UC70)")
     public ResponseEntity<MeterReadingResult> submit(@RequestBody @Valid MeterReadingRequest request) {
+        byte[] imageBytes = null;
+        if (request.base64Image() != null && !request.base64Image().isBlank()) {
+            try {
+                imageBytes = Base64.getDecoder().decode(request.base64Image());
+            } catch (IllegalArgumentException e) {
+                throw BaseException.badRequest("base64Image: invalid");
+            }
+        }
         MeterReadingSubmitCommand cmd = new MeterReadingSubmitCommand(
             request.roomId(), request.serviceId(), request.billingMonth(),
-            request.newReading(), request.readingImageUrl()
+            request.newReading(), request.readingImageUrl(), imageBytes, request.mimeType()
         );
         return ResponseEntity.ok(service.submit(cmd));
     }
@@ -83,6 +93,29 @@ public class MeterReadingController {
     @Operation(summary = "Reject a reading (UC70)")
     public ResponseEntity<MeterReadingResult> reject(@PathVariable Long id, @RequestParam String reason) {
         return ResponseEntity.ok(service.reject(id, reason));
+    }
+
+    @GetMapping("/rooms/{roomId}/old-reading")
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN', 'RESIDENT')")
+    @Operation(summary = "Old reading that will be used for the next submission (UC70)")
+    public ResponseEntity<Map<String, Object>> getOldReading(
+            @PathVariable String roomId,
+            @RequestParam Long serviceId) {
+        Long decoded = decodeRoomId(roomId);
+        BigDecimal old = service.getCurrentOldReading(decoded, serviceId);
+        return ResponseEntity.ok(Map.of("roomId", decoded, "serviceId", serviceId, "oldReading", old));
+    }
+
+    private Long decodeRoomId(String roomId) {
+        Long decoded = hashidsCodec.decode(roomId);
+        if (decoded == null) {
+            try {
+                decoded = Long.parseLong(roomId);
+            } catch (NumberFormatException e) {
+                throw BaseException.badRequest("roomId: invalid");
+            }
+        }
+        return decoded;
     }
 
     @GetMapping("/rooms/{roomId}/history")

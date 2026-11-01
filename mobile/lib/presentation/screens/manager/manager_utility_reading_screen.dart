@@ -1,671 +1,485 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/constants/app_colors.dart';
-import '../../../core/services/invoice_service.dart';
+import '../../../core/services/meter_reading_service.dart';
 import '../../../core/services/motel_service.dart';
 import '../../../core/services/service_service.dart';
+import '../tenant/meter/meter_history_view.dart';
+import '../tenant/meter/meter_submit_screen.dart';
+import '../tenant/meter/meter_widgets.dart';
+import 'meter/meter_review_card.dart';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Data models for the room×service matrix
-// ─────────────────────────────────────────────────────────────────────────────
-class _RoomRow {
-  final int roomId;
-  final String roomNumber;
-  final List<_RoomServiceCell> services;
-  _RoomRow({required this.roomId, required this.roomNumber, required this.services});
-}
+const _meteredTypes = ['METERED', 'TIERED', 'PER_QUANTITY', 'PER_INDEX'];
 
-class _RoomServiceCell {
-  final int serviceId;
-  final String serviceName;
-  final double oldReading;
-  final MeterReadingResult? currentReading;
-  _RoomServiceCell({required this.serviceId, required this.serviceName, required this.oldReading, this.currentReading});
-}
-
-class _PendingItem {
-  final int roomId;
-  final String roomNumber;
-  final int serviceId;
-  final String serviceName;
-  final double oldReading;
-  final MeterReadingResult reading;
-  _PendingItem({required this.roomId, required this.roomNumber, required this.serviceId, required this.serviceName, required this.oldReading, required this.reading});
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Main Screen
-// ─────────────────────────────────────────────────────────────────────────────
+/// Quản lý: đối soát & duyệt chỉ số điện/nước (UC70), tự chốt số có OCR (UC71),
+/// xem lịch sử theo phòng (UC72).
 class ManagerUtilityReadingScreen extends StatefulWidget {
-  const ManagerUtilityReadingScreen({Key? key}) : super(key: key);
+  const ManagerUtilityReadingScreen({super.key});
 
   @override
   State<ManagerUtilityReadingScreen> createState() => _ManagerUtilityReadingScreenState();
 }
 
+class _StatusFilter {
+  final String key;
+  final String label;
+  const _StatusFilter(this.key, this.label);
+}
+
+const _filters = [
+  _StatusFilter(MeterStatus.pending, 'Chờ duyệt'),
+  _StatusFilter('MISSING', 'Chưa ghi'),
+  _StatusFilter(MeterStatus.rejected, 'Từ chối'),
+  _StatusFilter(MeterStatus.approved, 'Đã duyệt'),
+  _StatusFilter('ALL', 'Tất cả'),
+];
+
 class _ManagerUtilityReadingScreenState extends State<ManagerUtilityReadingScreen> {
   List<MotelResult> _motels = [];
-  int? _selectedMotelId;
-
+  int? _motelId;
   List<RoomResult> _rooms = [];
   List<ServiceResult> _services = [];
-  List<MeterReadingResult> _readings = [];
+  List<MeterReading> _readings = [];
 
-  bool _isLoading = false;
+  bool _loading = true;
   String? _error;
-  late String _billingMonth;
-  bool _bulkLoading = false;
+  late String _monthKey;
+  String _filter = MeterStatus.pending;
+  final Set<int> _busyIds = {};
+  bool _bulkBusy = false;
 
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _billingMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
+    _monthKey = MeterRules.monthKeyOf(DateTime.now());
     _loadMotels();
   }
 
   Future<void> _loadMotels() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final res = await MotelService.list(size: 50);
+      if (!mounted) return;
+      setState(() {
+        _motels = res.content;
+        _motelId = res.content.isNotEmpty ? res.content.first.id : null;
+      });
+      if (_motelId == null) {
+        setState(() => _loading = false);
+        return;
+      }
+      await _fetch();
+    } catch (e) {
       if (mounted) {
         setState(() {
-          _motels = res.content;
-          if (res.content.isNotEmpty) _selectedMotelId = res.content.first.id;
+          _loading = false;
+          _error = meterErrorText(e);
         });
-        if (_selectedMotelId != null) _fetchData();
       }
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
     }
   }
 
-  Future<void> _fetchData() async {
-    if (_selectedMotelId == null) return;
-    setState(() { _isLoading = true; _error = null; });
+  Future<void> _fetch() async {
+    final motelId = _motelId;
+    if (motelId == null) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      final roomsRes = await RoomService.list(_selectedMotelId!, size: 200);
-      final servicesRes = await ServiceService.list(_selectedMotelId!);
-      final readingsRes = await MeterReadingService.list(size: 500);
-      if (mounted) {
-        setState(() {
-          _rooms = roomsRes.content;
-          _services = servicesRes.where((s) => ['METERED', 'TIERED', 'PER_QUANTITY', 'PER_INDEX'].contains(s.chargeType)).toList();
-          _readings = readingsRes.content;
-          _isLoading = false;
-        });
-      }
+      final rooms = await RoomService.list(motelId, size: 300);
+      final services = await ServiceService.list(motelId);
+      final readings = await MeterReadingApi.list(size: 2000);
+      if (!mounted || motelId != _motelId) return;
+      final roomIds = rooms.content.map((r) => r.id).toSet();
+      setState(() {
+        _rooms = rooms.content..sort((a, b) => a.roomNumber.compareTo(b.roomNumber));
+        _services = services.where((s) => _meteredTypes.contains(s.chargeType)).toList();
+        _readings = readings.where((r) => roomIds.contains(r.roomId)).toList();
+        _loading = false;
+      });
     } catch (e) {
-      if (mounted) setState(() { _isLoading = false; _error = e.toString(); });
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = meterErrorText(e);
+      });
     }
   }
 
-  List<_RoomRow> get _tableData {
-    final targetMonth = '$_billingMonth-01';
-    final List<_RoomRow> result = [];
+  Future<void> _refreshReadings() async {
+    try {
+      final readings = await MeterReadingApi.list(size: 2000);
+      final roomIds = _rooms.map((r) => r.id).toSet();
+      if (mounted) setState(() => _readings = readings.where((r) => roomIds.contains(r.roomId)).toList());
+    } catch (e) {
+      _snack('Không tải lại được: ${meterErrorText(e)}', error: true);
+    }
+  }
+
+  // ── Dữ liệu kỳ đang xem ───────────────────────────────────────────────────
+
+  List<MeterReviewEntry> get _entries {
+    final result = <MeterReviewEntry>[];
     for (final room in _rooms) {
-      if (['EMPTY', 'AVAILABLE', 'OUT_OF_BUSINESS'].contains(room.status)) continue;
-      final cells = <_RoomServiceCell>[];
+      final hasReading = _readings.any((r) => r.roomId == room.id && r.monthKey == _monthKey);
+      // Phòng trống/ngừng kinh doanh không cần chốt số, trừ khi đã có bản ghi.
+      if (!hasReading && ['EMPTY', 'AVAILABLE', 'OUT_OF_BUSINESS'].contains(room.status)) continue;
       for (final svc in _services) {
-        MeterReadingResult? currentReading;
-        for (final r in _readings) {
-          if (r.roomId == room.id && r.serviceId == svc.id && r.billingMonth == targetMonth) {
-            currentReading = r;
-            break;
-          }
-        }
-        final pastApproved = _readings
-            .where((r) => r.roomId == room.id && r.serviceId == svc.id && r.status == 'APPROVED' && r.billingMonth.compareTo(targetMonth) < 0)
+        final candidates = _readings
+            .where((r) => r.roomId == room.id && r.serviceId == svc.id && r.monthKey == _monthKey)
             .toList()
-          ..sort((a, b) => b.billingMonth.compareTo(a.billingMonth));
-        final oldReading = pastApproved.isNotEmpty ? (pastApproved.first.newReading ?? 0) : 0.0;
-        cells.add(_RoomServiceCell(serviceId: svc.id, serviceName: svc.name, oldReading: oldReading, currentReading: currentReading));
+          ..sort((a, b) {
+            if (a.isApproved != b.isApproved) return a.isApproved ? -1 : 1;
+            return (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0));
+          });
+        final past = _readings
+            .where((r) => r.roomId == room.id && r.serviceId == svc.id && r.isApproved && r.monthKey.compareTo(_monthKey) < 0)
+            .toList()
+          ..sort((a, b) => b.monthKey.compareTo(a.monthKey));
+        result.add(MeterReviewEntry(
+          roomId: room.id,
+          roomLabel: room.roomNumber,
+          serviceId: svc.id,
+          serviceName: svc.name,
+          unit: svc.unit,
+          reading: candidates.isEmpty ? null : candidates.first,
+          knownOldReading: past.isEmpty ? null : past.first.newReading,
+          average: MeterRules.averageConsumption(
+            _readings,
+            roomId: room.id,
+            serviceId: svc.id,
+            beforeMonthKey: _monthKey,
+          ),
+        ));
       }
-      result.add(_RoomRow(roomId: room.id, roomNumber: room.roomNumber, services: cells));
     }
     return result;
   }
 
-  List<_PendingItem> get _pendingItems {
-    final result = <_PendingItem>[];
-    for (final row in _tableData) {
-      for (final cell in row.services) {
-        if (cell.currentReading != null && (cell.currentReading!.status == 'PENDING' || cell.currentReading!.status == 'SUBMITTED')) {
-          result.add(_PendingItem(roomId: row.roomId, roomNumber: row.roomNumber, serviceId: cell.serviceId, serviceName: cell.serviceName, oldReading: cell.oldReading, reading: cell.currentReading!));
-        }
-      }
-    }
-    return result;
-  }
+  // ── Hành động ─────────────────────────────────────────────────────────────
 
-  int get _pendingCount {
-    int c = 0;
-    for (final row in _tableData) {
-      for (final cell in row.services) {
-        if (cell.currentReading == null || cell.currentReading!.status == 'PENDING' || cell.currentReading!.status == 'SUBMITTED') c++;
-      }
-    }
-    return c;
-  }
-
-  Future<void> _approve(int id) async {
-    try { await MeterReadingService.approve(id); _fetchData(); _showSnack('Đã phê duyệt!', success: true); } catch (e) { _showSnack('Lỗi: $e'); }
-  }
-
-  Future<void> _reject(int id) async {
-    final reason = await _askReason();
-    if (reason == null) return;
-    try { await MeterReadingService.reject(id, reason: reason); _fetchData(); _showSnack('Đã từ chối.'); } catch (e) { _showSnack('Lỗi: $e'); }
-  }
-
-  Future<void> _bulkApprove() async {
-    final pending = _pendingItems;
-    if (pending.isEmpty) return;
-    final confirm = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Duyệt tất cả', style: TextStyle(fontWeight: FontWeight.bold)),
-      content: Text('Duyệt ${pending.length} chỉ số đang chờ?'),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
-        ElevatedButton(onPressed: () => Navigator.pop(ctx, true), style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('Xác nhận')),
-      ],
-    ));
-    if (confirm != true) return;
-    setState(() => _bulkLoading = true);
-    try {
-      await MeterReadingService.bulkApprove(pending.map((p) => p.reading.id).toList());
-      _fetchData(); _showSnack('Đã duyệt tất cả ${pending.length} chỉ số!', success: true);
-    } catch (e) { _showSnack('Lỗi: $e'); }
-    finally { if (mounted) setState(() => _bulkLoading = false); }
-  }
-
-  Future<String?> _askReason() => showDialog<String>(context: context, builder: (ctx) {
-    final ctrl = TextEditingController();
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Lý do từ chối', style: TextStyle(fontWeight: FontWeight.bold)),
-      content: TextField(controller: ctrl, autofocus: true, decoration: InputDecoration(hintText: 'Nhập lý do...', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Hủy')),
-        ElevatedButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim().isEmpty ? 'Chỉ số không hợp lệ' : ctrl.text.trim()), style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('Từ chối')),
-      ],
-    );
-  });
-
-  void _showSnack(String msg, {bool success = false}) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: success ? AppColors.success : null, behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
-  }
-
-  void _showImageLightbox(String url) {
-    showDialog(context: context, builder: (ctx) => Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(padding: const EdgeInsets.all(16), child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Text('Minh chứng chỉ số', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        const SizedBox(height: 12),
-        ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(url, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 80))),
-        const SizedBox(height: 12),
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Đóng')),
-      ])),
-    ));
-  }
-
-  void _showSubmitReadingSheet(int roomId, String roomNumber) {
-    final rowData = _tableData.firstWhere((r) => r.roomId == roomId);
-    final ctrls = <int, TextEditingController>{};
-    for (final cell in rowData.services) {
-      ctrls[cell.serviceId] = TextEditingController(text: cell.currentReading?.newReading?.toStringAsFixed(0) ?? '');
-    }
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
-        child: Container(
-          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(height: 20),
-            Row(children: [
-              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.speed_outlined, color: AppColors.primary, size: 22)),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Ghi chỉ số - Phòng $roomNumber', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                Text('Kỳ: $_billingMonth', style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
-              ])),
-            ]),
-            const SizedBox(height: 20),
-            ConstrainedBox(
-              constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
-              child: SingleChildScrollView(child: Column(children: rowData.services.map((cell) {
-                final approved = cell.currentReading?.status == 'APPROVED';
-                final isElectric = cell.serviceName.toLowerCase().contains('điện');
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: approved ? AppColors.success.withValues(alpha: 0.05) : const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: approved ? AppColors.success.withValues(alpha: 0.2) : const Color(0xFFE2E8F0)),
-                  ),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Icon(isElectric ? Icons.bolt_rounded : Icons.water_drop_rounded, color: isElectric ? Colors.amber[800] : Colors.blue, size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(cell.serviceName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))),
-                      if (approved) _statusBadge('APPROVED'),
-                    ]),
-                    const SizedBox(height: 8),
-                    if (approved)
-                      Text('Đã chốt: ${cell.currentReading?.newReading?.toStringAsFixed(0) ?? '-'}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight))
-                    else
-                      Row(children: [
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          const Text('Đầu kỳ', style: TextStyle(fontSize: 11, color: AppColors.textSecondaryLight)),
-                          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8), decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(8)), child: Text(cell.oldReading.toStringAsFixed(0), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textSecondaryLight))),
-                        ])),
-                        const SizedBox(width: 10),
-                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          const Text('Cuối kỳ *', style: TextStyle(fontSize: 11, color: AppColors.textSecondaryLight)),
-                          TextField(
-                            controller: ctrls[cell.serviceId],
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                            decoration: InputDecoration(
-                              hintText: '> ${cell.oldReading.toStringAsFixed(0)}',
-                              hintStyle: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight),
-                              filled: true, fillColor: Colors.white,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppColors.primary, width: 1.5)),
-                            ),
-                          ),
-                        ])),
-                      ]),
-                  ]),
-                );
-              }).toList())),
+  Future<void> _approve(MeterReviewEntry e) async {
+    final r = e.reading!;
+    if (e.isHighConsumption) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Tiêu thụ bất thường'),
+          content: Text(
+            'Phòng ${e.roomLabel} dùng ${MeterRules.formatReading(r.consumption)} '
+            '(trung bình ${MeterRules.formatReading(e.average?.roundToDouble())}). '
+            'Bạn đã đối chiếu ảnh đồng hồ và vẫn muốn duyệt?',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Xem lại')),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: FilledButton.styleFrom(backgroundColor: MeterTone.confirm),
+              child: const Text('Vẫn duyệt'),
             ),
-            const SizedBox(height: 20),
-            Row(children: [
-              Expanded(child: TextButton(onPressed: () { Navigator.pop(ctx); for (final c in ctrls.values) c.dispose(); }, style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14), side: const BorderSide(color: Color(0xFFE2E8F0)))), child: const Text('Hủy', style: TextStyle(color: AppColors.textSecondaryLight, fontWeight: FontWeight.w600)))),
-              const SizedBox(width: 12),
-              Expanded(flex: 2, child: ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(ctx);
-                  bool submitted = false;
-                  for (final cell in rowData.services) {
-                    if (cell.currentReading?.status == 'APPROVED') continue;
-                    final val = double.tryParse(ctrls[cell.serviceId]?.text ?? '');
-                    if (val == null) continue;
-                    if (val < cell.oldReading) { _showSnack('Chỉ số ${cell.serviceName} phải >= đầu kỳ!'); return; }
-                    submitted = true;
-                    try { await MeterReadingService.submit(roomId: roomId, serviceId: cell.serviceId, billingMonth: '$_billingMonth-01', newReading: val); } catch (e) { if (mounted) _showSnack('Lỗi ${cell.serviceName}: $e'); }
-                  }
-                  for (final c in ctrls.values) c.dispose();
-                  if (submitted) { _fetchData(); _showSnack('Đã lưu chỉ số!', success: true); } else { _showSnack('Vui lòng nhập ít nhất một chỉ số!'); }
-                },
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-                child: const Text('Lưu tất cả', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-              )),
-            ]),
-          ]),
+          ],
         ),
-      ),
-    );
-  }
-
-  void _showTinderModal() {
-    final pending = _pendingItems;
-    if (pending.isEmpty) return;
-    showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: Colors.transparent,
-      builder: (ctx) => _TinderReviewSheet(
-        pendingItems: pending,
-        onApprove: (id) async { await MeterReadingService.approve(id); },
-        onReject: (id) async { await MeterReadingService.reject(id, reason: 'Chỉ số không hợp lệ'); },
-        onDone: () { Navigator.pop(ctx); _fetchData(); },
-        onShowImage: _showImageLightbox,
-      ),
-    );
-  }
-
-  Widget _statusBadge(String status) {
-    Color color; String label;
-    switch (status) {
-      case 'APPROVED': color = AppColors.success; label = 'Đã duyệt'; break;
-      case 'REJECTED': color = AppColors.danger; label = 'Từ chối'; break;
-      case 'SUBMITTED': color = const Color(0xFF3B82F6); label = 'Đã nộp'; break;
-      default: color = AppColors.warning; label = 'Chờ duyệt';
+      );
+      if (ok != true) return;
     }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-      child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
-    );
+    setState(() => _busyIds.add(r.id));
+    try {
+      await MeterReadingApi.approve(r.id);
+      _snack('Đã duyệt ${e.serviceName} phòng ${e.roomLabel}.');
+      await _refreshReadings();
+    } catch (err) {
+      _snack('Không duyệt được: ${meterErrorText(err)}', error: true);
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(r.id));
+    }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final tableData = _tableData;
-    final pendingItems = _pendingItems;
-    final pendingCount = _pendingCount;
+  Future<void> _reject(MeterReviewEntry e) async {
+    final reason = await askMeterRejectReason(context, e);
+    if (reason == null || reason.trim().isEmpty) return;
+    final r = e.reading!;
+    setState(() => _busyIds.add(r.id));
+    try {
+      await MeterReadingApi.reject(r.id, reason.trim());
+      _snack('Đã từ chối. Khách thuê sẽ thấy lý do để gửi lại.');
+      await _refreshReadings();
+    } catch (err) {
+      _snack('Không từ chối được: ${meterErrorText(err)}', error: true);
+    } finally {
+      if (mounted) setState(() => _busyIds.remove(r.id));
+    }
+  }
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      floatingActionButton: FloatingActionButton(onPressed: _fetchData, backgroundColor: AppColors.primary, elevation: 2, child: const Icon(Icons.refresh_rounded, color: Colors.white)),
-      body: Column(children: [
-        // Controls bar
-        Container(
-          color: Colors.white,
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              if (_motels.isNotEmpty) ...[
-                Expanded(child: Container(
-                  height: 40,
-                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0)), color: Colors.white),
-                  child: DropdownButtonHideUnderline(child: DropdownButton<int>(
-                    isExpanded: true, value: _selectedMotelId,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    borderRadius: BorderRadius.circular(12),
-                    style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B), fontWeight: FontWeight.w500),
-                    items: _motels.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name, overflow: TextOverflow.ellipsis))).toList(),
-                    onChanged: (v) { if (v != null) { setState(() => _selectedMotelId = v); _fetchData(); } },
-                  )),
-                )),
-                const SizedBox(width: 10),
-              ],
-              GestureDetector(
-                onTap: _pickMonth,
-                child: Container(
-                  height: 40, padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0)), color: Colors.white),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    const Icon(Icons.calendar_month_rounded, size: 16, color: AppColors.textSecondaryLight),
-                    const SizedBox(width: 6),
-                    Text(_billingMonth, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  ]),
-                ),
-              ),
-            ]),
-            if (pendingItems.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(child: OutlinedButton.icon(
-                  onPressed: _showTinderModal,
-                  icon: const Icon(Icons.flash_on_rounded, size: 16),
-                  label: const Text('Duyệt nhanh', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  style: OutlinedButton.styleFrom(foregroundColor: AppColors.primary, side: const BorderSide(color: AppColors.primary), padding: const EdgeInsets.symmetric(vertical: 8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                )),
-                const SizedBox(width: 10),
-                Expanded(child: ElevatedButton.icon(
-                  onPressed: _bulkLoading ? null : _bulkApprove,
-                  icon: _bulkLoading ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.done_all_rounded, size: 16),
-                  label: Text('Duyệt tất cả (${pendingItems.length})', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 8), elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                )),
-              ]),
-            ],
-            if (pendingCount > 0) ...[
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: const Color(0xFFFFFBEB), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFFDE68A))),
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.warning_amber_rounded, size: 14, color: Color(0xFFD97706)),
-                  const SizedBox(width: 6),
-                  Text('$pendingCount mục chưa chốt số', style: const TextStyle(fontSize: 12, color: Color(0xFFD97706), fontWeight: FontWeight.w600)),
-                ]),
-              ),
-            ],
-          ]),
+  Future<void> _record(MeterReviewEntry e) async {
+    final saved = await Navigator.push<MeterReading>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MeterSubmitScreen(
+          roomId: e.roomId,
+          roomLabel: e.roomLabel,
+          serviceId: e.serviceId,
+          serviceName: e.serviceName,
+          unit: e.unit,
+          monthKey: _monthKey,
+          knownOldReading: e.knownOldReading,
+          existing: e.reading,
+          isManager: true,
         ),
-        // Table
-        Expanded(child: RefreshIndicator(
-          onRefresh: _fetchData, color: AppColors.primary,
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2))
-              : _error != null ? _buildError()
-              : tableData.isEmpty ? _buildEmpty()
-              : ListView.builder(padding: const EdgeInsets.all(12), itemCount: tableData.length, itemBuilder: (_, i) => _buildRoomCard(tableData[i])),
-        )),
-      ]),
+      ),
     );
+    if (saved == null || !mounted) return;
+    _snack('Đã chốt ${e.serviceName} phòng ${e.roomLabel}: ${MeterStatus.label(saved.status)}.');
+    await _refreshReadings();
+  }
+
+  /// Duyệt hàng loạt các bản chờ duyệt, bỏ qua bản có cảnh báo tiêu thụ cao (BR70.7).
+  Future<void> _bulkApprove(List<MeterReviewEntry> eligible, int flagged) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Duyệt ${eligible.length} chỉ số?'),
+        content: Text(
+          'Các chỉ số chờ duyệt của ${MeterRules.monthLabel(_monthKey).toLowerCase()} sẽ được chốt để tính hóa đơn.'
+          '${flagged > 0 ? '\n\n$flagged mục có tiêu thụ bất thường không được duyệt nhanh, hãy kiểm tra từng mục.' : ''}',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Hủy')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: MeterTone.confirm),
+            child: const Text('Duyệt'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    setState(() => _bulkBusy = true);
+    try {
+      await MeterReadingApi.bulkApprove(eligible.map((e) => e.reading!.id).toList());
+      _snack('Đã duyệt ${eligible.length} chỉ số.');
+      await _refreshReadings();
+    } catch (err) {
+      _snack('Duyệt hàng loạt thất bại: ${meterErrorText(err)}', error: true);
+      await _refreshReadings();
+    } finally {
+      if (mounted) setState(() => _bulkBusy = false);
+    }
   }
 
   Future<void> _pickMonth() async {
-    final parts = _billingMonth.split('-');
-    final picked = await showDialog<String>(context: context, builder: (ctx) => _MonthPickerDialog(initialYear: int.parse(parts[0]), initialMonth: int.parse(parts[1])));
-    if (picked != null) { setState(() => _billingMonth = picked); _fetchData(); }
+    final key = await pickMeterMonth(context, _monthKey);
+    if (key != null && key != _monthKey) setState(() => _monthKey = key);
   }
 
-  Widget _buildError() => Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-    const Icon(Icons.error_outline, size: 48, color: AppColors.danger),
-    const SizedBox(height: 12),
-    Text(_error ?? '', style: const TextStyle(color: AppColors.danger)),
-    const SizedBox(height: 12),
-    ElevatedButton.icon(onPressed: _fetchData, icon: const Icon(Icons.refresh), label: const Text('Thử lại'), style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white)),
-  ]));
-
-  Widget _buildEmpty() => Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
-    Container(width: 70, height: 70, decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.08), shape: BoxShape.circle), child: const Icon(Icons.speed_outlined, size: 36, color: AppColors.primary)),
-    const SizedBox(height: 16),
-    const Text('Không có phòng hoặc dịch vụ đo đếm nào', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-    const SizedBox(height: 6),
-    const Text('Chọn khu trọ hoặc kỳ khác để xem', style: TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
-  ]));
-
-  Widget _buildRoomCard(_RoomRow row) {
-    final hasPending = row.services.any((c) => c.currentReading == null || c.currentReading!.status == 'PENDING' || c.currentReading!.status == 'SUBMITTED');
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFF1F5F9)), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 3))]),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Padding(padding: const EdgeInsets.fromLTRB(16, 14, 16, 10), child: Row(children: [
-          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Text('Phòng ${row.roomNumber}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primary))),
-          const Spacer(),
-          if (hasPending) GestureDetector(
-            onTap: () => _showSubmitReadingSheet(row.roomId, row.roomNumber),
-            child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8)), child: const Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(Icons.speed_outlined, size: 14, color: Colors.white), SizedBox(width: 5),
-              Text('Ghi chỉ số', style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
-            ])),
-          ),
-        ])),
-        Container(height: 1, color: const Color(0xFFF1F5F9)),
-        ...row.services.map((cell) => _buildServiceRow(cell)),
-      ]),
+  void _snack(String msg, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: error ? MeterTone.dangerText : MeterTone.successText,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
-  Widget _buildServiceRow(_RoomServiceCell cell) {
-    final cur = cell.currentReading;
-    final isElectric = cell.serviceName.toLowerCase().contains('điện');
-    return Padding(padding: const EdgeInsets.fromLTRB(16, 10, 16, 10), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        Container(width: 30, height: 30, decoration: BoxDecoration(color: (isElectric ? Colors.amber : Colors.blue).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)), child: Icon(isElectric ? Icons.bolt_rounded : Icons.water_drop_rounded, color: isElectric ? Colors.amber[800] : Colors.blue, size: 16)),
-        const SizedBox(width: 10),
-        Expanded(child: Text(cell.serviceName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13))),
-        if (cur != null) _statusBadge(cur.status),
-      ]),
-      const SizedBox(height: 8),
-      if (cur == null)
-        const Text('Chưa ghi chỉ số', style: TextStyle(fontSize: 12, color: AppColors.textSecondaryLight, fontStyle: FontStyle.italic))
-      else ...[
-        Row(children: [
-          _infoChip('Đầu', cell.oldReading.toStringAsFixed(0), Colors.grey),
-          const SizedBox(width: 6),
-          _infoChip('Cuối', cur.newReading?.toStringAsFixed(0) ?? '-', AppColors.primary),
-          const SizedBox(width: 6),
-          _infoChip('≈${cur.consumption?.toStringAsFixed(0) ?? '0'}đv', '', AppColors.success),
-          if (cur.imageUrl != null) ...[
-            const Spacer(),
-            GestureDetector(onTap: () => _showImageLightbox(cur.imageUrl!), child: Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(6)), child: const Icon(Icons.image_outlined, size: 16, color: AppColors.textSecondaryLight))),
-          ],
-        ]),
-        if (cur.status == 'PENDING' || cur.status == 'SUBMITTED') ...[
-          const SizedBox(height: 8),
-          Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-            TextButton(onPressed: () => _reject(cur.id), style: TextButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), foregroundColor: AppColors.danger), child: const Text('Từ chối', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-            const SizedBox(width: 6),
-            ElevatedButton(onPressed: () => _approve(cur.id), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4), elevation: 0, minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))), child: const Text('Duyệt', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold))),
-          ]),
-        ],
-      ],
-    ]));
-  }
-
-  Widget _infoChip(String label, String value, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(6)),
-      child: Text(value.isEmpty ? label : '$label: $value', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color)),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tinder Review Sheet
-// ─────────────────────────────────────────────────────────────────────────────
-class _TinderReviewSheet extends StatefulWidget {
-  final List<_PendingItem> pendingItems;
-  final Future<void> Function(int) onApprove;
-  final Future<void> Function(int) onReject;
-  final VoidCallback onDone;
-  final void Function(String) onShowImage;
-  const _TinderReviewSheet({required this.pendingItems, required this.onApprove, required this.onReject, required this.onDone, required this.onShowImage});
-
-  @override
-  State<_TinderReviewSheet> createState() => _TinderReviewSheetState();
-}
-
-class _TinderReviewSheetState extends State<_TinderReviewSheet> {
-  int _index = 0;
-  bool _acting = false;
-
-  Future<void> _doApprove() async {
-    if (_acting || _index >= widget.pendingItems.length) return;
-    setState(() => _acting = true);
-    await widget.onApprove(widget.pendingItems[_index].reading.id);
-    if (mounted) setState(() { _index++; _acting = false; });
-  }
-
-  Future<void> _doReject() async {
-    if (_acting || _index >= widget.pendingItems.length) return;
-    setState(() => _acting = true);
-    await widget.onReject(widget.pendingItems[_index].reading.id);
-    if (mounted) setState(() { _index++; _acting = false; });
-  }
+  // ── UI ────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final total = widget.pendingItems.length;
-    final done = _index >= total;
-    final cur = done ? null : widget.pendingItems[_index];
-
-    return Container(
-      decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(2)))),
-        const SizedBox(height: 16),
-        Row(children: [
-          Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.flash_on_rounded, color: AppColors.primary, size: 22)),
-          const SizedBox(width: 12),
-          const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Duyệt nhanh chỉ số', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            Text('Xem xét lần lượt từng chỉ số', style: TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
-          ])),
-          if (!done) Text('${_index + 1} / $total', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.primary)),
-        ]),
-        const SizedBox(height: 20),
-        if (done) ...[
-          Container(padding: const EdgeInsets.all(24), decoration: BoxDecoration(color: AppColors.success.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.success.withValues(alpha: 0.2))), child: const Column(children: [
-            Icon(Icons.check_circle_outline_rounded, size: 52, color: AppColors.success),
-            SizedBox(height: 12),
-            Text('Hoàn thành!', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-            SizedBox(height: 6),
-            Text('Không còn chỉ số nào cần xét duyệt.', style: TextStyle(fontSize: 13, color: AppColors.textSecondaryLight)),
-          ])),
-          const SizedBox(height: 20),
-          SizedBox(width: double.infinity, child: ElevatedButton(onPressed: widget.onDone, style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))), child: const Text('Đóng', style: TextStyle(fontWeight: FontWeight.bold)))),
-        ] else if (cur != null) ...[
-          Container(width: double.infinity, padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFE2E8F0))), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Phòng ${cur.roomNumber} – ${cur.serviceName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E293B))),
-            Text('Kỳ: ${cur.reading.billingMonth.length >= 7 ? cur.reading.billingMonth.substring(0, 7) : cur.reading.billingMonth}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
-            const SizedBox(height: 12),
-            if (cur.reading.imageUrl != null)
-              GestureDetector(onTap: () => widget.onShowImage(cur.reading.imageUrl!), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(cur.reading.imageUrl!, height: 140, width: double.infinity, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(height: 80, decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(12)), child: const Center(child: Icon(Icons.broken_image, color: AppColors.textSecondaryLight))))))
-            else
-              Container(height: 80, decoration: BoxDecoration(color: const Color(0xFFE2E8F0), borderRadius: BorderRadius.circular(12)), child: const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.image_not_supported_outlined, size: 28, color: AppColors.textSecondaryLight), SizedBox(height: 4), Text('Không có ảnh minh chứng', style: TextStyle(fontSize: 11, color: AppColors.textSecondaryLight))]))),
-            const SizedBox(height: 14),
-            Row(children: [
-              Expanded(child: _numCell('Đầu kỳ', cur.oldReading.toStringAsFixed(0), const Color(0xFF64748B))),
-              const SizedBox(width: 8),
-              Expanded(child: _numCell('Cuối kỳ', cur.reading.newReading?.toStringAsFixed(0) ?? '-', AppColors.primary)),
-              const SizedBox(width: 8),
-              Expanded(child: _numCell('Tiêu thụ', cur.reading.consumption?.toStringAsFixed(0) ?? '-', AppColors.success)),
-            ]),
-          ])),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: OutlinedButton.icon(onPressed: _acting ? null : _doReject, icon: const Icon(Icons.close_rounded, size: 18), label: const Text('Từ chối', style: TextStyle(fontWeight: FontWeight.bold)), style: OutlinedButton.styleFrom(foregroundColor: AppColors.danger, side: const BorderSide(color: AppColors.danger), padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))))),
-            const SizedBox(width: 12),
-            Expanded(child: ElevatedButton.icon(onPressed: _acting ? null : _doApprove, icon: const Icon(Icons.check_rounded, size: 18), label: const Text('Duyệt', style: TextStyle(fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF059669), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))))),
-          ]),
-          const SizedBox(height: 8),
-          const Text('Xem xét từng mục rồi nhấn Duyệt hoặc Từ chối', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: AppColors.textSecondaryLight)),
-        ],
-      ]),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: AppColors.backgroundLight,
+        body: Column(
+          children: [
+            Material(
+              color: Colors.white,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: Row(
+                      children: [
+                        Expanded(child: _buildMotelPicker()),
+                        const SizedBox(width: 10),
+                        MeterMonthButton(monthKey: _monthKey, onPressed: _pickMonth),
+                      ],
+                    ),
+                  ),
+                  const TabBar(
+                    labelColor: AppColors.primary,
+                    unselectedLabelColor: AppColors.textSecondaryLight,
+                    indicatorColor: AppColors.primary,
+                    labelStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                    tabs: [Tab(text: 'Duyệt chỉ số'), Tab(text: 'Lịch sử')],
+                  ),
+                  const Divider(height: 1, color: AppColors.borderLight),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(strokeWidth: 2))
+                  : _error != null
+                      ? MeterEmptyState(
+                          icon: Icons.error_outline_rounded,
+                          title: 'Không tải được dữ liệu',
+                          message: _error,
+                          actionLabel: 'Thử lại',
+                          onAction: _motels.isEmpty ? _loadMotels : _fetch,
+                        )
+                      : _motelId == null
+                          ? const MeterEmptyState(
+                              icon: Icons.apartment_rounded,
+                              title: 'Chưa có khu trọ',
+                              message: 'Tạo khu trọ và phòng trước khi chốt chỉ số.',
+                            )
+                          : TabBarView(
+                              children: [
+                                _buildReviewTab(),
+                                MeterHistoryView(
+                                  key: ValueKey('history-$_motelId'),
+                                  rooms: _rooms
+                                      .map((r) => MeterRoomOption(id: r.id, label: r.roomNumber))
+                                      .toList(),
+                                ),
+                              ],
+                            ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  Widget _numCell(String label, String value, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-    decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
-    child: Column(children: [
-      Text(label, style: TextStyle(fontSize: 10, color: color.withValues(alpha: 0.7))),
-      const SizedBox(height: 4),
-      Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
-    ]),
-  );
-}
+  Widget _buildMotelPicker() {
+    if (_motels.isEmpty) {
+      return const Text('Chỉ số điện nước',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimaryLight));
+    }
+    return DropdownButtonFormField<int>(
+      initialValue: _motelId,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: 'Khu trọ',
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: AppColors.borderLight),
+        ),
+      ),
+      items: _motels
+          .map((m) => DropdownMenuItem(value: m.id, child: Text(m.name, overflow: TextOverflow.ellipsis)))
+          .toList(),
+      onChanged: (v) {
+        if (v == null || v == _motelId) return;
+        setState(() => _motelId = v);
+        _fetch();
+      },
+    );
+  }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Month Picker Dialog
-// ─────────────────────────────────────────────────────────────────────────────
-class _MonthPickerDialog extends StatefulWidget {
-  final int initialYear; final int initialMonth;
-  const _MonthPickerDialog({required this.initialYear, required this.initialMonth});
-  @override State<_MonthPickerDialog> createState() => _MonthPickerDialogState();
-}
+  Widget _buildReviewTab() {
+    final entries = _entries;
+    final counts = <String, int>{};
+    for (final e in entries) {
+      counts[e.statusKey] = (counts[e.statusKey] ?? 0) + 1;
+    }
+    final visible = _filter == 'ALL' ? entries : entries.where((e) => e.statusKey == _filter).toList();
+    final pending = entries.where((e) => e.statusKey == MeterStatus.pending).toList();
+    final eligible = pending.where((e) => !e.isHighConsumption).toList();
+    final flagged = pending.length - eligible.length;
 
-class _MonthPickerDialogState extends State<_MonthPickerDialog> {
-  late int _year; late int _month;
-  @override void initState() { super.initState(); _year = widget.initialYear; _month = widget.initialMonth; }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-    title: const Text('Chọn kỳ', style: TextStyle(fontWeight: FontWeight.bold)),
-    content: Column(mainAxisSize: MainAxisSize.min, children: [
-      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-        IconButton(onPressed: () => setState(() => _year--), icon: const Icon(Icons.chevron_left_rounded)),
-        Text('$_year', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-        IconButton(onPressed: () => setState(() => _year++), icon: const Icon(Icons.chevron_right_rounded)),
-      ]),
-      const SizedBox(height: 10),
-      GridView.count(crossAxisCount: 4, shrinkWrap: true, mainAxisSpacing: 6, crossAxisSpacing: 6, childAspectRatio: 1.5, children: List.generate(12, (i) {
-        final m = i + 1; final sel = m == _month;
-        return GestureDetector(onTap: () => setState(() => _month = m), child: Container(
-          decoration: BoxDecoration(color: sel ? AppColors.primary : const Color(0xFFF1F5F9), borderRadius: BorderRadius.circular(8)),
-          child: Center(child: Text('T$m', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: sel ? Colors.white : const Color(0xFF475569)))),
-        ));
-      })),
-    ]),
-    actions: [
-      TextButton(onPressed: () => Navigator.pop(context), child: const Text('Hủy')),
-      ElevatedButton(onPressed: () => Navigator.pop(context, '$_year-${_month.toString().padLeft(2, '0')}'), style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('Chọn')),
-    ],
-  );
+    return RefreshIndicator(
+      onRefresh: _fetch,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: _filters.map((f) {
+                final n = f.key == 'ALL' ? entries.length : (counts[f.key] ?? 0);
+                final selected = _filter == f.key;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text('${f.label} ($n)'),
+                    selected: selected,
+                    showCheckmark: true,
+                    checkmarkColor: Colors.white,
+                    materialTapTargetSize: MaterialTapTargetSize.padded,
+                    selectedColor: AppColors.primary,
+                    backgroundColor: Colors.white,
+                    side: BorderSide(color: selected ? AppColors.primary : AppColors.borderLight),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    labelStyle: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: selected ? Colors.white : AppColors.textSecondaryLight,
+                    ),
+                    onSelected: (_) => setState(() => _filter = f.key),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (pending.isNotEmpty && (_filter == MeterStatus.pending || _filter == 'ALL')) ...[
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: eligible.isEmpty || _bulkBusy ? null : () => _bulkApprove(eligible, flagged),
+                icon: _bulkBusy
+                    ? const SizedBox(
+                        width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.done_all_rounded, size: 18),
+                label: Text('Duyệt nhanh ${eligible.length} chỉ số'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 48),
+                  backgroundColor: MeterTone.confirm,
+                  textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+              ),
+            ),
+            if (flagged > 0) ...[
+              const SizedBox(height: 8),
+              MeterNotice.warning('$flagged mục tiêu thụ bất thường phải duyệt từng mục.'),
+            ],
+            const SizedBox(height: 12),
+          ],
+          if (_services.isEmpty)
+            const MeterEmptyState(
+              icon: Icons.speed_rounded,
+              title: 'Khu trọ chưa có dịch vụ tính theo chỉ số',
+              message: 'Thêm dịch vụ điện/nước theo đồng hồ trong mục Dịch vụ.',
+            )
+          else if (visible.isEmpty)
+            MeterEmptyState(
+              icon: Icons.inbox_outlined,
+              title: _filter == MeterStatus.pending ? 'Không có chỉ số chờ duyệt' : 'Không có mục nào',
+              message: MeterRules.monthLabel(_monthKey),
+            )
+          else
+            ...visible.map((e) => MeterReviewCard(
+                  key: ValueKey('${e.roomId}-${e.serviceId}'),
+                  entry: e,
+                  busy: _bulkBusy || (e.reading != null && _busyIds.contains(e.reading!.id)),
+                  onApprove: () => _approve(e),
+                  onReject: () => _reject(e),
+                  onRecord: () => _record(e),
+                )),
+        ],
+      ),
+    );
+  }
 }

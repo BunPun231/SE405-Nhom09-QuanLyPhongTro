@@ -18,6 +18,7 @@ public class MeterReading {
     private MeterReadingStatus status;
     private UUID submittedBy;
     private UUID approvedBy;
+    private String rejectReason;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
 
@@ -63,6 +64,8 @@ public class MeterReading {
     public void setSubmittedBy(UUID submittedBy) { this.submittedBy = submittedBy; }
     public UUID getApprovedBy() { return approvedBy; }
     public void setApprovedBy(UUID approvedBy) { this.approvedBy = approvedBy; }
+    public String getRejectReason() { return rejectReason; }
+    public void setRejectReason(String rejectReason) { this.rejectReason = rejectReason; }
     public OffsetDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
     public OffsetDateTime getUpdatedAt() { return updatedAt; }
