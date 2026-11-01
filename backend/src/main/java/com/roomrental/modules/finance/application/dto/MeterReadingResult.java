@@ -17,6 +17,7 @@ public record MeterReadingResult(
     String readingImageUrl,
     Double ocrConfidence,
     OffsetDateTime createdAt,
-    OffsetDateTime updatedAt
+    OffsetDateTime updatedAt,
+    String rejectReason
 ) {}
 

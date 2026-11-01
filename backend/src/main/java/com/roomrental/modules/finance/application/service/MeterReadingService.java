@@ -22,6 +22,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -85,7 +86,24 @@ public class MeterReadingService {
             throw BaseException.badRequest("New reading cannot be less than old reading");
         }
 
-        MeterReading reading = new MeterReading();
+        String imageUrl = command.readingImageUrl();
+        if (command.imageBytes() != null && command.imageBytes().length > 0) {
+            try {
+                imageUrl = cloudinaryService.uploadImage(command.imageBytes(), "meter-readings");
+            } catch (IOException e) {
+                throw BaseException.badRequest("Không thể tải ảnh đồng hồ lên: " + e.getMessage());
+            }
+        }
+
+        // BR70.4: a not-yet-approved reading of the same service/month is overwritten
+        // instead of creating a duplicate record.
+        MeterReading reading = meterReadingRepository
+                .findByRoomIdAndBillingMonth(command.roomId(), billingMonth).stream()
+                .filter(r -> serviceUsageId.equals(r.getServiceUsageId()))
+                .filter(r -> r.getStatus() != MeterReadingStatus.APPROVED)
+                .findFirst()
+                .orElseGet(MeterReading::new);
+        reading.setRejectReason(null);
         reading.setTenantId(tenantId);
         reading.setRoomId(command.roomId());
         reading.setServiceUsageId(serviceUsageId);
@@ -93,7 +111,9 @@ public class MeterReadingService {
         reading.setOldReading(oldReading);
         reading.setNewReading(command.newReading());
         reading.calculateConsumption();
-        reading.setReadingImageUrl(command.readingImageUrl());
+        if (imageUrl != null || reading.getId() == null) {
+            reading.setReadingImageUrl(imageUrl);
+        }
         
         String role = SecurityUtils.getCurrentRole();
         if ("MANAGER".equals(role) || "ADMIN".equals(role)) {
@@ -104,7 +124,9 @@ public class MeterReadingService {
         }
         
         reading.setSubmittedBy(actorId);
-        reading.setCreatedAt(OffsetDateTime.now());
+        if (reading.getCreatedAt() == null) {
+            reading.setCreatedAt(OffsetDateTime.now());
+        }
         reading.setUpdatedAt(OffsetDateTime.now());
 
         MeterReading saved = meterReadingRepository.save(reading);
@@ -156,6 +178,7 @@ public class MeterReadingService {
             imageUrl,
             ocrResult.confidence(),
             null,
+            null,
             null
         );
     }
@@ -193,6 +216,9 @@ public class MeterReadingService {
 
     @Transactional
     public MeterReadingResult reject(Long id, String reason) {
+        if (reason == null || reason.isBlank()) {
+            throw BaseException.badRequest("Vui lòng nhập lý do từ chối");
+        }
         UUID tenantId = SecurityUtils.requireTenantId();
         MeterReading reading = meterReadingRepository.findByIdAndTenantId(id, tenantId)
             .orElseThrow(() -> BaseException.notFound("MeterReading", id));
@@ -202,6 +228,7 @@ public class MeterReadingService {
         }
 
         reading.setStatus(MeterReadingStatus.REJECTED);
+        reading.setRejectReason(reason.trim());
         reading.setUpdatedAt(OffsetDateTime.now());
         
         MeterReading saved = meterReadingRepository.save(reading);
@@ -245,6 +272,13 @@ public class MeterReadingService {
             .collect(Collectors.toList());
     }
 
+    /** UC70: old reading the system will use for the next submission (pre-filled on the form). */
+    @Transactional(readOnly = true)
+    public BigDecimal getCurrentOldReading(Long roomId, Long serviceId) {
+        SecurityUtils.requireTenantId();
+        return resolveOldReading(resolveActiveServiceUsageId(roomId, serviceId));
+    }
+
     private MeterReadingResult toResult(MeterReading reading, Double confidence) {
         Long serviceId = null;
         String serviceName = null;
@@ -272,7 +306,8 @@ public class MeterReadingService {
             reading.getReadingImageUrl(),
             confidence,
             reading.getCreatedAt(),
-            reading.getUpdatedAt()
+            reading.getUpdatedAt(),
+            reading.getRejectReason()
         );
     }
 

@@ -102,4 +102,57 @@ class MeterReadingServiceTest {
         assertThat(captor.getValue().getOldReading()).isEqualByComparingTo("123");
         assertThat(result.oldReading()).isEqualByComparingTo("123");
     }
+
+    @Test
+    @DisplayName("Reject requires a reason and stores it on the reading")
+    void reject_storesReason() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> meterReadingService.reject(1L, "  "))
+                .isInstanceOf(com.roomrental.common.exception.BaseException.class);
+
+        MeterReading pending = new MeterReading();
+        pending.setId(7L);
+        pending.setStatus(MeterReading.MeterReadingStatus.PENDING);
+        when(meterReadingRepository.findByIdAndTenantId(7L, tenantId)).thenReturn(Optional.of(pending));
+        when(meterReadingRepository.save(any(MeterReading.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = meterReadingService.reject(7L, " Ảnh mờ ");
+
+        assertThat(result.status()).isEqualTo("REJECTED");
+        assertThat(result.rejectReason()).isEqualTo("Ảnh mờ");
+    }
+
+    @Test
+    @DisplayName("Submit uploads the meter photo and overwrites a rejected reading of the same month")
+    void submit_uploadsImageAndOverwritesRejected() throws Exception {
+        Room room = new Room();
+        room.setId(10L);
+        room.setStatus(RoomStatus.RENTED);
+        ServiceUsage usage = new ServiceUsage();
+        usage.setId(55L);
+        usage.setStartIndex(BigDecimal.ZERO);
+
+        MeterReading rejected = new MeterReading();
+        rejected.setId(9L);
+        rejected.setServiceUsageId(55L);
+        rejected.setStatus(MeterReading.MeterReadingStatus.REJECTED);
+        rejected.setRejectReason("Sai số");
+        rejected.setCreatedAt(OffsetDateTime.now().minusDays(1));
+
+        LocalDate month = LocalDate.of(2026, 6, 1);
+        when(roomRepository.findById(10L)).thenReturn(Optional.of(room));
+        when(serviceUsageRepository.findActiveByRoomIdAndServiceId(10L, 88L)).thenReturn(Optional.of(usage));
+        when(meterReadingRepository.existsByServiceUsageIdAndBillingMonthAndStatus(55L, month, "APPROVED")).thenReturn(false);
+        when(meterReadingRepository.findLatestApprovedByServiceUsageId(55L)).thenReturn(Optional.empty());
+        when(serviceUsageRepository.findById(55L)).thenReturn(Optional.of(usage));
+        when(meterReadingRepository.findByRoomIdAndBillingMonth(10L, month)).thenReturn(List.of(rejected));
+        when(cloudinaryService.uploadImage(any(byte[].class), any(String.class))).thenReturn("https://img/x.jpg");
+        when(meterReadingRepository.save(any(MeterReading.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        var result = meterReadingService.submit(new MeterReadingSubmitCommand(
+                10L, 88L, month, new BigDecimal("20"), null, new byte[]{1, 2, 3}, "image/jpeg"));
+
+        assertThat(result.id()).isEqualTo(9L);
+        assertThat(result.readingImageUrl()).isEqualTo("https://img/x.jpg");
+        assertThat(result.rejectReason()).isNull();
+    }
 }

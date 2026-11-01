@@ -53,4 +53,7 @@ public class MeterReadingEntity extends BaseEntity {
 
     @Column(name = "approved_by")
     private UUID approvedBy;
+
+    @Column(name = "reject_reason", columnDefinition = "TEXT")
+    private String rejectReason;
 }
