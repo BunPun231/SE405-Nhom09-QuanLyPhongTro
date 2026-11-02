@@ -22,6 +22,7 @@ import com.roomrental.modules.finance.domain.repository.InvoiceDetailRepository;
 import com.roomrental.modules.finance.domain.repository.InvoiceRepository;
 import com.roomrental.modules.finance.domain.repository.ServiceUsageRepository;
 import com.roomrental.modules.finance.domain.repository.ResidentBalanceRepository;
+import com.roomrental.modules.finance.domain.repository.TransactionRepository;
 import com.roomrental.modules.contract.domain.model.Contract;
 import com.roomrental.modules.contract.domain.repository.ContractRepository;
 import com.roomrental.modules.contract.domain.repository.ContractServiceItemRepository;
@@ -35,7 +36,10 @@ import com.roomrental.modules.service.domain.repository.RentalServiceRepository;
 import com.roomrental.modules.service.domain.repository.ServicePricingRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,7 +49,10 @@ import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -71,6 +78,10 @@ public class InvoiceService {
     private final ObjectMapper objectMapper;
     private final MotelRepository motelRepository;
     private final ContractServiceItemRepository contractServiceItemRepository;
+    private final TransactionRepository transactionRepository;
+
+    private static final String SKIP_ALREADY_INVOICED = "Đã có hóa đơn cho kỳ này";
+    private static final String SKIP_MISSING_READING = "Thiếu chỉ số điện/nước đã duyệt (APPROVED)";
 
     public InvoiceService(
             InvoiceRepository invoiceRepository,
@@ -86,7 +97,8 @@ public class InvoiceService {
             ApplicationEventPublisher eventPublisher,
             ObjectMapper objectMapper,
             MotelRepository motelRepository,
-            ContractServiceItemRepository contractServiceItemRepository) {
+            ContractServiceItemRepository contractServiceItemRepository,
+            TransactionRepository transactionRepository) {
         this.invoiceRepository = invoiceRepository;
         this.invoiceDetailRepository = invoiceDetailRepository;
         this.contractRepository = contractRepository;
@@ -101,6 +113,7 @@ public class InvoiceService {
         this.objectMapper = objectMapper;
         this.motelRepository = motelRepository;
         this.contractServiceItemRepository = contractServiceItemRepository;
+        this.transactionRepository = transactionRepository;
     }
 
     @Async("taskExecutor")
@@ -108,42 +121,7 @@ public class InvoiceService {
     public CompletableFuture<Void> generateForMotel(InvoiceGenerateCommand command) {
         log.info("Starting async invoice generation for motelId={}, billingMonth={}", command.motelId(), command.billingMonth());
         try {
-            List<InvoiceResult> results = new ArrayList<>();
-            List<SkippedInvoiceRoomResult> skippedRooms = new ArrayList<>();
-            List<Room> rooms = roomRepository.findByMotelId(command.motelId(), Pageable.unpaged()).getContent();
-
-            for (Room room : rooms) {
-                List<Contract> contracts = contractRepository.findByRoomId(room.getId()).stream()
-                        .filter(Contract::isActive)
-                        .toList();
-                if (contracts.isEmpty()) {
-                    continue;
-                }
-
-                Contract contract = contracts.get(0);
-
-                // Check duplicate
-                if (invoiceRepository.existsByContractIdAndBillingMonth(contract.getId(), command.billingMonth())) {
-                    continue;
-                }
-
-                try {
-                    InvoiceResult res = generateForSingleContract(contract, command.billingMonth());
-                    if (res != null) {
-                        results.add(res);
-                    } else {
-                        skippedRooms.add(new SkippedInvoiceRoomResult(
-                            room.getId(), room.getRoomNumber(), "Missing APPROVED meter reading for at least one meter-based service"));
-                    }
-                } catch (Exception ex) {
-                    log.error("Failed to generate invoice in motel loop for contractId={}", contract.getId(), ex);
-                    skippedRooms.add(new SkippedInvoiceRoomResult(
-                        room.getId(), room.getRoomNumber(), "Error: " + ex.getMessage()));
-                }
-            }
-
-            log.info("Completed async invoice generation for motelId={}, billingMonth={}, created={}, skipped={}",
-                    command.motelId(), command.billingMonth(), results.size(), skippedRooms.size());
+            runGeneration(command);
             return CompletableFuture.completedFuture(null);
         } catch (Exception ex) {
             log.error("Async invoice generation failed for motelId={}, billingMonth={}", command.motelId(), command.billingMonth(), ex);
@@ -151,8 +129,69 @@ public class InvoiceService {
         }
     }
 
+    /**
+     * UC73 - chạy đồng bộ để Quản lý nhận ngay kết quả: số hóa đơn đã tạo và các phòng bị bỏ qua.
+     * Idempotent: phòng đã có hóa đơn trong kỳ được bỏ qua (BR73.2).
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public InvoiceGenerationResult generateForMotelNow(InvoiceGenerateCommand command) {
+        return runGeneration(command);
+    }
+
+    private InvoiceGenerationResult runGeneration(InvoiceGenerateCommand command) {
+        LocalDate billingMonth = command.billingMonth().withDayOfMonth(1);
+        List<InvoiceResult> results = new ArrayList<>();
+        List<SkippedInvoiceRoomResult> skippedRooms = new ArrayList<>();
+        List<Room> rooms = roomRepository.findByMotelId(command.motelId(), Pageable.unpaged()).getContent();
+
+        for (Room room : rooms) {
+            List<Contract> contracts = contractRepository.findByRoomId(room.getId()).stream()
+                    .filter(Contract::isActive)
+                    .toList();
+            if (contracts.isEmpty()) {
+                continue;
+            }
+
+            Contract contract = contracts.get(0);
+
+            // Check duplicate (BR73.2 - idempotent)
+            if (invoiceRepository.existsByContractIdAndBillingMonth(contract.getId(), billingMonth)) {
+                skippedRooms.add(new SkippedInvoiceRoomResult(room.getId(), room.getRoomNumber(), SKIP_ALREADY_INVOICED));
+                continue;
+            }
+
+            try {
+                InvoiceResult res = generateForSingleContract(contract, billingMonth);
+                if (res != null) {
+                    results.add(res);
+                } else {
+                    skippedRooms.add(new SkippedInvoiceRoomResult(
+                        room.getId(), room.getRoomNumber(), SKIP_MISSING_READING));
+                }
+            } catch (Exception ex) {
+                log.error("Failed to generate invoice in motel loop for contractId={}", contract.getId(), ex);
+                skippedRooms.add(new SkippedInvoiceRoomResult(
+                    room.getId(), room.getRoomNumber(), "Lỗi: " + ex.getMessage()));
+            }
+        }
+
+        log.info("Completed invoice generation for motelId={}, billingMonth={}, created={}, skipped={}, skippedRooms={}",
+                command.motelId(), billingMonth, results.size(), skippedRooms.size(),
+                skippedRooms.stream().map(r -> r.roomNumber() + ":" + r.reason()).toList());
+        return new InvoiceGenerationResult(results, skippedRooms);
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public InvoiceResult generateForSingleContract(Contract contract, LocalDate billingMonth) {
+        return generateInvoice(contract, billingMonth, List.of(), null);
+    }
+
+    /**
+     * Sinh một hóa đơn cho hợp đồng. {@code extraLines} là các dòng phụ thu / giảm trừ (UC76),
+     * {@code replacesInvoiceId} là hóa đơn bị hủy mà hóa đơn này tái cấp.
+     */
+    private InvoiceResult generateInvoice(Contract contract, LocalDate billingMonth,
+                                          List<InvoiceDetail> extraLines, Long replacesInvoiceId) {
         UUID tenantId = contract.getTenantId();
         Room room = roomRepository.findById(contract.getRoomId())
                 .orElseThrow(() -> BaseException.notFound("Room", contract.getRoomId()));
@@ -216,7 +255,25 @@ public class InvoiceService {
             details.addAll(strategy.calculate(context));
         }
 
-        BigDecimal total = details.stream().map(InvoiceDetail::getLineTotal).reduce(BigDecimal.ZERO, BigDecimal::add);
+        for (InvoiceDetail extra : extraLines) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("strategyCode", "ADJUSTMENT");
+            item.put("hasTiers", false);
+            item.put("serviceId", null);
+            item.put("serviceName", extra.getDescription());
+            item.put("chargeType", "ADJUSTMENT");
+            item.put("quantity", BigDecimal.ONE);
+            item.put("basePrice", extra.getLineTotal());
+            snapshotItems.add(item);
+            details.add(extra);
+        }
+
+        BigDecimal total = details.stream().map(InvoiceDetail::getLineTotal).reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(0, RoundingMode.HALF_UP);
+        if (total.compareTo(BigDecimal.ZERO) < 0) {
+            // BR73.10: số tiền hóa đơn không được âm
+            throw BaseException.badRequest("Tổng tiền hóa đơn sau điều chỉnh không được âm");
+        }
         invoice.setTotalAmount(total);
         
         // 3. Apply auto-pay from balance if any
@@ -248,7 +305,7 @@ public class InvoiceService {
         }
 
         InvoiceGenerateCommand fakeCommand = new InvoiceGenerateCommand(room.getMotelId(), billingMonth);
-        invoice.setCalculationSnapshot(buildCalculationSnapshot(fakeCommand, contract, room, snapshotItems));
+        invoice.setCalculationSnapshot(buildCalculationSnapshot(fakeCommand, contract, room, snapshotItems, replacesInvoiceId));
         
         Invoice saved = invoiceRepository.save(invoice);
         
@@ -283,7 +340,16 @@ public class InvoiceService {
 
     @Transactional(readOnly = true)
     public Page<InvoiceResult> list(Long motelId, String status, Pageable pageable) {
+        return list(motelId, status, null, null, pageable);
+    }
+
+    /** UC74 - Quản lý: lọc theo khu trọ, trạng thái, kỳ (yyyy-MM) và phòng; mặc định kỳ mới nhất trước (BR74.4). */
+    @Transactional(readOnly = true)
+    public Page<InvoiceResult> list(Long motelId, String status, String billingMonth, Long roomId, Pageable pageable) {
         UUID tenantId = SecurityUtils.requireTenantId();
+        LocalDate month = parseBillingMonth(billingMonth);
+        Pageable sorted = withDefaultSort(pageable);
+        boolean hasStatus = status != null && !status.isEmpty();
         if (motelId != null) {
             Page<Contract> contractsPage = contractRepository.findByTenantIdAndMotelId(tenantId, motelId, Pageable.unpaged());
             List<Long> contractIds = contractsPage.getContent().stream()
@@ -292,37 +358,93 @@ public class InvoiceService {
             if (contractIds.isEmpty()) {
                 return Page.empty(pageable);
             }
-            if (status != null && !status.isEmpty()) {
-                return invoiceRepository.findByTenantIdAndContractIdInAndStatus(tenantId, contractIds, status, pageable).map(this::toResult);
-            }
-            return invoiceRepository.findByTenantIdAndContractIdIn(tenantId, contractIds, pageable).map(this::toResult);
+            return filteredPage(p -> hasStatus
+                    ? invoiceRepository.findByTenantIdAndContractIdInAndStatus(tenantId, contractIds, status, p)
+                    : invoiceRepository.findByTenantIdAndContractIdIn(tenantId, contractIds, p),
+                    month, roomId, sorted);
         }
 
-        if (status != null && !status.isEmpty()) {
-            return invoiceRepository.findByTenantIdAndStatus(tenantId, status, pageable).map(this::toResult);
-        }
-        return invoiceRepository.findByTenantId(tenantId, pageable).map(this::toResult);
+        return filteredPage(p -> hasStatus
+                ? invoiceRepository.findByTenantIdAndStatus(tenantId, status, p)
+                : invoiceRepository.findByTenantId(tenantId, p),
+                month, roomId, sorted);
     }
-
 
     @Transactional(readOnly = true)
     public Page<InvoiceResult> listMyInvoices(String status, Pageable pageable) {
+        return listMyInvoices(status, null, pageable);
+    }
+
+    /** UC74 - Khách thuê: chỉ thấy hóa đơn của hợp đồng mình là người đại diện (BR74.2). */
+    @Transactional(readOnly = true)
+    public Page<InvoiceResult> listMyInvoices(String status, String billingMonth, Pageable pageable) {
         UUID tenantId = SecurityUtils.requireTenantId();
         UUID userId = SecurityUtils.getCurrentUserId();
-        
+        LocalDate month = parseBillingMonth(billingMonth);
+
         List<Long> contractIds = contractRepository.findByTenantId(tenantId).stream()
             .filter(c -> c.getPrimaryResidentUserId() != null && c.getPrimaryResidentUserId().equals(userId))
             .map(Contract::getId)
             .collect(Collectors.toList());
-            
+
         if (contractIds.isEmpty()) {
             return Page.empty(pageable);
         }
-        
-        if (status != null && !status.isEmpty()) {
-            return invoiceRepository.findByTenantIdAndContractIdInAndStatus(tenantId, contractIds, status, pageable).map(this::toResult);
+
+        boolean hasStatus = status != null && !status.isEmpty();
+        return filteredPage(p -> hasStatus
+                ? invoiceRepository.findByTenantIdAndContractIdInAndStatus(tenantId, contractIds, status, p)
+                : invoiceRepository.findByTenantIdAndContractIdIn(tenantId, contractIds, p),
+                month, null, withDefaultSort(pageable));
+    }
+
+    private Page<InvoiceResult> filteredPage(java.util.function.Function<Pageable, Page<Invoice>> query,
+                                             LocalDate month, Long roomId, Pageable pageable) {
+        if (month == null && roomId == null) {
+            return query.apply(pageable).map(this::toResult);
         }
-        return invoiceRepository.findByTenantIdAndContractIdIn(tenantId, contractIds, pageable).map(this::toResult);
+        List<Invoice> all = query.apply(Pageable.unpaged()).getContent().stream()
+                .filter(i -> month == null || (i.getBillingMonth() != null
+                        && i.getBillingMonth().getYear() == month.getYear()
+                        && i.getBillingMonth().getMonthValue() == month.getMonthValue()))
+                .filter(i -> roomId == null || roomId.equals(i.getRoomId()))
+                .sorted(Comparator.comparing(Invoice::getBillingMonth, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(Invoice::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+        if (pageable.isUnpaged()) {
+            return new PageImpl<>(all.stream().map(this::toResult).toList());
+        }
+        int from = (int) Math.min(pageable.getOffset(), all.size());
+        int to = Math.min(from + pageable.getPageSize(), all.size());
+        List<InvoiceResult> content = all.subList(from, to).stream().map(this::toResult).toList();
+        return new PageImpl<>(content, pageable, all.size());
+    }
+
+    private static Pageable withDefaultSort(Pageable pageable) {
+        if (pageable == null || pageable.isUnpaged()) {
+            return pageable == null ? Pageable.unpaged() : pageable;
+        }
+        if (pageable.getSort().isSorted()) {
+            return pageable;
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                Sort.by(Sort.Order.desc("billingMonth"), Sort.Order.desc("id")));
+    }
+
+    /** Nhận "yyyy-MM" hoặc "yyyy-MM-dd"; trả về ngày đầu tháng hoặc null. */
+    static LocalDate parseBillingMonth(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return null;
+        }
+        String v = raw.trim();
+        try {
+            if (v.length() == 7) {
+                return LocalDate.parse(v + "-01");
+            }
+            return LocalDate.parse(v).withDayOfMonth(1);
+        } catch (Exception ex) {
+            throw BaseException.badRequest("Kỳ hóa đơn không hợp lệ, định dạng yyyy-MM: " + raw);
+        }
     }
 
     @Transactional(readOnly = true)
@@ -365,42 +487,176 @@ public class InvoiceService {
         return toResult(invoice);
     }
 
+    /**
+     * UC76 - Hủy và tái cấp hóa đơn sai sót. Hóa đơn cũ chuyển VOID (giữ nguyên số tiền để kiểm toán - BR76.2),
+     * chỉ số điện nước đúng được đồng bộ (BR76.5) và một hóa đơn mới được sinh ra (BR76.6).
+     * Trả về hóa đơn MỚI.
+     */
     @Transactional(rollbackFor = Exception.class)
     public InvoiceResult adjustInvoice(InvoiceAdjustCommand command) {
         UUID tenantId = SecurityUtils.requireTenantId();
         Invoice invoice = invoiceRepository.findByIdAndTenantId(command.invoiceId(), tenantId)
             .orElseThrow(() -> BaseException.notFound("Invoice", command.invoiceId()));
 
-        if (!invoice.canBeVoided()) {
-            throw BaseException.badRequest("Only PENDING invoice can be adjusted");
+        if (command.reason() == null || command.reason().isBlank()) {
+            throw BaseException.badRequest("Vui lòng nhập lý do hủy và tái cấp hóa đơn");
+        }
+        boolean hasPayment = invoice.getPaidAmount() != null && invoice.getPaidAmount().compareTo(BigDecimal.ZERO) > 0;
+        if (!invoice.canBeVoided() || hasPayment || transactionRepository.existsByInvoiceId(invoice.getId())) {
+            throw BaseException.badRequest("Không thể hủy hóa đơn đã có giao dịch. Vui lòng sử dụng tính năng Khấu trừ vào kỳ sau");
         }
 
+        Contract contract = contractRepository.findById(invoice.getContractId())
+            .orElseThrow(() -> BaseException.notFound("Contract", invoice.getContractId()));
+
+        // 1. Đồng bộ chỉ số điện/nước đúng (key = serviceId)
+        syncCorrectedReadings(invoice, command.correctedReadings());
+
+        // 2. Tính các dòng điều chỉnh
+        List<InvoiceDetail> extraLines = new ArrayList<>();
+        if (command.customAdjustments() != null && !command.customAdjustments().isEmpty()) {
+            Map<Long, InvoiceDetail> oldDetails = new HashMap<>();
+            for (InvoiceDetail d : invoiceDetailRepository.findByInvoiceId(invoice.getId())) {
+                oldDetails.put(d.getId(), d);
+            }
+            command.customAdjustments().forEach((detailId, newAmount) -> {
+                InvoiceDetail old = oldDetails.get(detailId);
+                if (old == null || newAmount == null) {
+                    throw BaseException.badRequest("Dòng hóa đơn cần sửa không hợp lệ: " + detailId);
+                }
+                BigDecimal delta = newAmount.subtract(old.getLineTotal() != null ? old.getLineTotal() : BigDecimal.ZERO);
+                if (delta.signum() != 0) {
+                    extraLines.add(adjustmentLine("Điều chỉnh " + old.getDescription(), delta));
+                }
+            });
+        }
+        if (command.adjustments() != null) {
+            for (InvoiceAdjustCommand.AdjustmentLine line : command.adjustments()) {
+                if (line == null || line.amount() == null || line.amount().signum() == 0) {
+                    continue;
+                }
+                if (line.description() == null || line.description().isBlank()) {
+                    throw BaseException.badRequest("Khoản phụ thu/giảm trừ phải có mô tả");
+                }
+                String prefix = line.amount().signum() > 0 ? "Phụ thu: " : "Giảm trừ: ";
+                extraLines.add(adjustmentLine(prefix + line.description().trim(), line.amount()));
+            }
+        }
+
+        // 3. Hoàn lại tiền đã khấu trừ từ số dư của hóa đơn cũ (sẽ khấu trừ lại khi sinh hóa đơn mới)
+        restoreBalanceDeduction(invoice, contract);
+
+        // 4. Hủy hóa đơn cũ
+        BigDecimal oldTotal = invoice.getTotalAmount();
         invoice.setStatus(InvoiceStatus.VOID);
-        invoice.setCancelReason(command.reason());
+        invoice.setCancelReason(command.reason().trim());
         invoice.setUpdatedAt(OffsetDateTime.now());
         invoiceRepository.save(invoice);
 
+        // 5. Sinh hóa đơn mới
+        InvoiceResult reissued = generateInvoice(contract, invoice.getBillingMonth(), extraLines, invoice.getId());
+        if (reissued == null) {
+            throw BaseException.badRequest("Không thể tái cấp: phòng còn thiếu chỉ số điện/nước đã duyệt cho kỳ này");
+        }
+
+        log.info("AUDIT invoice reissued: actor={}, oldInvoiceId={}, newInvoiceId={}, oldTotal={}, newTotal={}, reason={}",
+                SecurityUtils.getCurrentUserId(), invoice.getId(), reissued.id(), oldTotal, reissued.totalAmount(), command.reason());
+
         eventPublisher.publishEvent(new InvoiceCancelledEvent(
             tenantId, SecurityUtils.getCurrentUserId(), SecurityUtils.getCurrentRole(),
-            invoice.getId(), command.reason()
+            invoice.getId(),
+            command.reason().trim() + " (Đã tái cấp hóa đơn mới #" + reissued.id() + ")"
         ));
 
-        // Re-generate logic would go here. For now returning the voided one.
-        return toResult(invoice);
+        return getDetail(reissued.id());
+    }
+
+    private void syncCorrectedReadings(Invoice invoice, Map<Long, BigDecimal> correctedReadings) {
+        if (correctedReadings == null || correctedReadings.isEmpty()) {
+            return;
+        }
+        Map<Long, Long> serviceIdByUsage = serviceUsageRepository.findByRoomId(invoice.getRoomId()).stream()
+                .collect(Collectors.toMap(ServiceUsage::getId, ServiceUsage::getServiceId, (a, b) -> a));
+        List<MeterReading> readings = meterReadingRepository.findByRoomIdAndBillingMonth(invoice.getRoomId(), invoice.getBillingMonth())
+                .stream()
+                .filter(r -> r.getStatus() == MeterReading.MeterReadingStatus.APPROVED)
+                .toList();
+        java.util.Set<Long> applied = new java.util.HashSet<>();
+        for (MeterReading reading : readings) {
+            Long serviceId = serviceIdByUsage.get(reading.getServiceUsageId());
+            if (serviceId == null || !correctedReadings.containsKey(serviceId) || applied.contains(serviceId)) {
+                continue;
+            }
+            BigDecimal newValue = correctedReadings.get(serviceId);
+            if (newValue == null) {
+                continue;
+            }
+            if (reading.getOldReading() != null && newValue.compareTo(reading.getOldReading()) < 0) {
+                throw BaseException.badRequest("Chỉ số mới không được nhỏ hơn chỉ số cũ (" + reading.getOldReading().toPlainString() + ")");
+            }
+            reading.setNewReading(newValue);
+            reading.calculateConsumption();
+            reading.setUpdatedAt(OffsetDateTime.now());
+            meterReadingRepository.save(reading);
+            applied.add(serviceId);
+        }
+        for (Long serviceId : correctedReadings.keySet()) {
+            if (!applied.contains(serviceId)) {
+                throw BaseException.badRequest("Không tìm thấy chỉ số đã duyệt của dịch vụ " + serviceId + " trong kỳ này");
+            }
+        }
+    }
+
+    private static InvoiceDetail adjustmentLine(String description, BigDecimal amount) {
+        return new InvoiceDetail(description, BigDecimal.ONE, amount, null);
+    }
+
+    /** BR77.8: hoàn lại phần đã khấu trừ từ số dư của khách. */
+    private void restoreBalanceDeduction(Invoice invoice, Contract contract) {
+        BigDecimal deduction = invoice.getBalanceDeduction();
+        if (deduction == null || deduction.signum() <= 0 || contract == null || contract.getPrimaryResidentUserId() == null) {
+            return;
+        }
+        UUID residentId = contract.getPrimaryResidentUserId();
+        com.roomrental.modules.finance.domain.model.ResidentBalance rb = residentBalanceRepository.findById(residentId)
+            .orElseGet(() -> {
+                com.roomrental.modules.finance.domain.model.ResidentBalance created = new com.roomrental.modules.finance.domain.model.ResidentBalance();
+                created.setResidentUserId(residentId);
+                return created;
+            });
+        rb.addBalance(deduction);
+        residentBalanceRepository.save(rb);
     }
 
     @Transactional(rollbackFor = Exception.class)
     public void deleteInvoice(Long id) {
+        deleteInvoice(id, null);
+    }
+
+    /** UC77 - xóa mềm hóa đơn PENDING chưa có giao dịch; giữ nguyên chỉ số điện nước (BR77.5). */
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteInvoice(Long id, String reason) {
         UUID tenantId = SecurityUtils.requireTenantId();
         Invoice invoice = invoiceRepository.findByIdAndTenantId(id, tenantId)
             .orElseThrow(() -> BaseException.notFound("Invoice", id));
 
-        if (!invoice.canBeDeleted()) {
-            throw BaseException.badRequest("Cannot delete invoice with transactions");
+        if (!invoice.canBeDeleted() || transactionRepository.existsByInvoiceId(id)) {
+            throw BaseException.badRequest("Không thể xóa hóa đơn đã phát sinh thanh toán, vui lòng thực hiện hoàn tiền hoặc điều chỉnh");
         }
 
+        contractRepository.findById(invoice.getContractId())
+            .ifPresent(contract -> restoreBalanceDeduction(invoice, contract));
+
+        if (reason != null && !reason.isBlank()) {
+            invoice.setCancelReason(reason.trim());
+            invoice.setUpdatedAt(OffsetDateTime.now());
+            invoiceRepository.save(invoice);
+        }
         invoiceRepository.softDelete(id);
-        
+
+        log.info("AUDIT invoice deleted: actor={}, invoiceId={}, totalBeforeDelete={}, reason={}",
+                SecurityUtils.getCurrentUserId(), id, invoice.getTotalAmount(), reason);
+
         eventPublisher.publishEvent(new InvoiceDeletedEvent(
             tenantId, SecurityUtils.getCurrentUserId(), SecurityUtils.getCurrentRole(), id
         ));
@@ -524,8 +780,12 @@ public class InvoiceService {
             InvoiceGenerateCommand command,
             Contract contract,
             Room room,
-            List<Map<String, Object>> items) {
+            List<Map<String, Object>> items,
+            Long replacesInvoiceId) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
+        if (replacesInvoiceId != null) {
+            snapshot.put("replacesInvoiceId", replacesInvoiceId);
+        }
         snapshot.put("motelId", room.getMotelId());
         snapshot.put("roomId", room.getId());
         snapshot.put("contractId", contract.getId());

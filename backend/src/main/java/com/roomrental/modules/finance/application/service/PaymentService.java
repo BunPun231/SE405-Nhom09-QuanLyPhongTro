@@ -16,12 +16,17 @@ import com.roomrental.modules.finance.domain.repository.ResidentBalanceRepositor
 import com.roomrental.modules.finance.domain.repository.TransactionRepository;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -176,8 +181,62 @@ public class PaymentService {
 
     @Transactional(readOnly = true)
     public Page<TransactionResult> getTransactions(Pageable pageable) {
+        return getTransactions(null, pageable);
+    }
+
+    /**
+     * UC79 - Lịch sử giao dịch, mới nhất trước (BR79.3).
+     * Quản lý thấy toàn bộ giao dịch của mình; Khách thuê chỉ thấy giao dịch gắn với hóa đơn
+     * của hợp đồng mình là người đại diện (BR79.1 / BR111). {@code invoiceId} lọc theo một hóa đơn (BR75.7).
+     */
+    @Transactional(readOnly = true)
+    public Page<TransactionResult> getTransactions(Long invoiceId, Pageable pageable) {
         UUID tenantId = SecurityUtils.requireTenantId();
-        return transactionRepository.findByTenantId(tenantId, pageable).map(this::toResult);
+        boolean isResident = "RESIDENT".equalsIgnoreCase(SecurityUtils.getCurrentRole());
+
+        if (!isResident && invoiceId == null) {
+            Pageable sorted = pageable;
+            if (pageable != null && pageable.isPaged() && pageable.getSort().isUnsorted()) {
+                sorted = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                        Sort.by(Sort.Order.desc("paidAt"), Sort.Order.desc("id")));
+            }
+            return transactionRepository.findByTenantId(tenantId, sorted).map(this::toResult);
+        }
+
+        List<Long> invoiceIds;
+        if (isResident) {
+            UUID userId = SecurityUtils.getCurrentUserId();
+            List<Long> contractIds = contractRepository.findByTenantId(tenantId).stream()
+                    .filter(c -> c.getPrimaryResidentUserId() != null && c.getPrimaryResidentUserId().equals(userId))
+                    .map(Contract::getId)
+                    .toList();
+            if (contractIds.isEmpty()) {
+                return Page.empty(pageable == null ? Pageable.unpaged() : pageable);
+            }
+            invoiceIds = invoiceRepository.findByTenantIdAndContractIdIn(tenantId, contractIds, Pageable.unpaged())
+                    .getContent().stream().map(Invoice::getId).toList();
+            if (invoiceId != null) {
+                invoiceIds = invoiceIds.contains(invoiceId) ? List.of(invoiceId) : List.of();
+            }
+        } else {
+            invoiceRepository.findByIdAndTenantId(invoiceId, tenantId)
+                    .orElseThrow(() -> BaseException.notFound("Invoice", invoiceId));
+            invoiceIds = List.of(invoiceId);
+        }
+
+        List<TransactionResult> all = invoiceIds.stream()
+                .flatMap(id -> transactionRepository.findByInvoiceId(id).stream())
+                .filter(tx -> tenantId.equals(tx.getTenantId()))
+                .sorted(Comparator.comparing(Transaction::getPaidAt, Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(Transaction::getId, Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(this::toResult)
+                .toList();
+        if (pageable == null || pageable.isUnpaged()) {
+            return new PageImpl<>(all);
+        }
+        int from = (int) Math.min(pageable.getOffset(), all.size());
+        int to = Math.min(from + pageable.getPageSize(), all.size());
+        return new PageImpl<>(all.subList(from, to), pageable, all.size());
     }
 
     @Transactional(rollbackFor = Exception.class)

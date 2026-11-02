@@ -1,128 +1,33 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/services/invoice_service.dart';
+
+import '../../core/constants/app_colors.dart';
+import '../../core/services/invoice_service.dart';
+import '../screens/manager/invoices/invoice_adjust_sheet.dart';
+import '../screens/manager/invoices/invoice_delete_dialog.dart';
+import '../screens/manager/invoices/invoice_widgets.dart';
+import '../screens/manager/invoices/manual_payment_sheet.dart';
 import 'viet_qr_payment_sheet.dart';
 
-String _fmt(double v) => v.toStringAsFixed(0).replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]}.',
-    );
-
-String _fmtMonth(String? raw) {
-  if (raw == null || raw.isEmpty) return '-';
-  try {
-    final d = DateTime.parse(raw);
-    return 'Tháng ${d.month}/${d.year}';
-  } catch (_) {
-    return raw.length >= 7 ? raw.substring(0, 7) : raw;
-  }
-}
-
-String _fmtDate(String? raw) {
-  if (raw == null || raw.isEmpty) return 'Không có';
-  try {
-    final d = DateTime.parse(raw);
-    return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
-  } catch (_) {
-    return raw;
-  }
-}
-
-const Map<String, String> _chargeTypeLabels = {
-  'FIXED': 'Cố định',
-  'PER_PERSON': 'Theo người',
-  'PER_INDEX': 'Theo chỉ số',
-  'PER_QUANTITY': 'Theo số lượng',
-  'METERED': 'Theo chỉ số',
-  'TIERED': 'Lũy tiến bậc thang',
-};
-
-String _getChargeLabel(String chargeType, String serviceName) {
-  if (chargeType.isNotEmpty && _chargeTypeLabels.containsKey(chargeType)) {
-    return _chargeTypeLabels[chargeType]!;
-  }
-  final lower = serviceName.toLowerCase();
-  if (lower.contains('phòng')) return 'Cố định (Tiền phòng)';
-  if (lower.contains('điện')) return 'Theo chỉ số (Điện)';
-  if (lower.contains('nước')) return 'Theo chỉ số (Nước)';
-  if (lower.contains('người')) return 'Theo người';
-  return 'Cố định';
-}
-
-class _FeeItem {
-  final String serviceName;
-  final String chargeType;
-  final double? oldReading;
-  final double? newReading;
-  final double? consumption;
-  final double unitPrice;
-  final double totalCost;
-
-  _FeeItem({
-    required this.serviceName,
-    required this.chargeType,
-    this.oldReading,
-    this.newReading,
-    this.consumption,
-    required this.unitPrice,
-    required this.totalCost,
-  });
-}
-
-double _calculateItemCost(Map<String, dynamic> item) {
-  final basePrice = (item['basePrice'] as num?)?.toDouble() ?? 0;
-  final chargeType = item['chargeType']?.toString() ?? '';
-  if (chargeType == 'FIXED') return basePrice;
-  if (chargeType == 'PER_PERSON') {
-    final residents = (item['activeResidents'] as num?)?.toDouble() ?? 1;
-    return basePrice * residents;
-  }
-  if (chargeType == 'PER_QUANTITY') {
-    final qty = (item['quantity'] as num?)?.toDouble() ?? 1;
-    return basePrice * qty;
-  }
-  if (chargeType == 'PER_INDEX' || chargeType == 'METERED') {
-    final oldR = (item['oldReading'] as num?)?.toDouble() ?? 0;
-    final newR = (item['newReading'] as num?)?.toDouble() ?? 0;
-    final consumption = (newR - oldR).clamp(0, double.infinity).toDouble();
-    final tiers = item['pricingTiers'] as List?;
-    if (tiers != null && tiers.isNotEmpty) {
-      double remaining = consumption;
-      double totalCost = 0;
-      for (final t in tiers) {
-        if (remaining <= 0) break;
-        if (t is Map<String, dynamic>) {
-          final start = (t['tierStart'] as num?)?.toDouble() ?? 0;
-          final end = (t['tierEnd'] as num?)?.toDouble();
-          final price = (t['pricePerUnit'] as num?)?.toDouble() ?? 0;
-          final double capacity = end != null ? (end - start) : remaining;
-          final inTier = remaining < capacity ? remaining : capacity;
-          if (inTier > 0) {
-            totalCost += inTier * price;
-            remaining -= inTier;
-          }
-        }
-      }
-      return totalCost;
-    } else {
-      return consumption * basePrice;
-    }
-  }
-  return 0;
-}
-
+/// UC75: Chi tiết hóa đơn — bảng kê từng khoản, chỉ số điện nước đã dùng, lịch sử thanh toán
+/// và VietQR khi chưa thanh toán xong. Với Quản lý ([isManager]) có thêm: ghi nhận đã thu (UC78),
+/// hủy & tái cấp (UC76), xóa (UC77).
 class InvoiceDetailSheet extends StatefulWidget {
   final int invoiceId;
   final InvoiceResult? initialInvoice;
   final VoidCallback? onPaymentSuccess;
+  final bool isManager;
+
+  /// Gọi khi hóa đơn thay đổi (thu tiền, tái cấp, xóa) để màn hình gốc tải lại.
+  final VoidCallback? onChanged;
 
   const InvoiceDetailSheet({
     super.key,
     required this.invoiceId,
     this.initialInvoice,
     this.onPaymentSuccess,
+    this.isManager = false,
+    this.onChanged,
   });
 
   static void show(
@@ -130,6 +35,8 @@ class InvoiceDetailSheet extends StatefulWidget {
     required int invoiceId,
     InvoiceResult? initialInvoice,
     VoidCallback? onPaymentSuccess,
+    bool isManager = false,
+    VoidCallback? onChanged,
   }) {
     showModalBottomSheet(
       context: context,
@@ -139,6 +46,8 @@ class InvoiceDetailSheet extends StatefulWidget {
         invoiceId: invoiceId,
         initialInvoice: initialInvoice,
         onPaymentSuccess: onPaymentSuccess,
+        isManager: isManager,
+        onChanged: onChanged,
       ),
     );
   }
@@ -148,511 +57,399 @@ class InvoiceDetailSheet extends StatefulWidget {
 }
 
 class _InvoiceDetailSheetState extends State<InvoiceDetailSheet> {
+  late int _invoiceId;
   InvoiceResult? _invoice;
+  List<TransactionResult> _payments = [];
   bool _isLoading = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
+    _invoiceId = widget.invoiceId;
     _invoice = widget.initialInvoice;
     _fetchDetail();
   }
 
+  void _notifyChanged() {
+    widget.onChanged?.call();
+    widget.onPaymentSuccess?.call();
+  }
+
   Future<void> _fetchDetail() async {
-    if (_invoice == null) {
-      setState(() => _isLoading = true);
-    }
+    if (_invoice == null) setState(() => _isLoading = true);
     try {
-      final res = await InvoiceService.get(widget.invoiceId);
-      if (mounted) {
-        setState(() {
-          _invoice = res;
-          _isLoading = false;
-          _error = null;
-        });
-      }
+      final res = await InvoiceService.get(_invoiceId);
+      if (!mounted) return;
+      setState(() {
+        _invoice = res;
+        _isLoading = false;
+        _error = null;
+      });
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString().replaceFirst('Exception: ', '');
+          _error = cleanError(e);
           _isLoading = false;
         });
       }
     }
+    try {
+      final tx = await PaymentService.transactions(invoiceId: _invoiceId, size: 20);
+      if (mounted) setState(() => _payments = tx.content);
+    } catch (_) {
+      // Lịch sử thanh toán là phần phụ; lỗi không chặn xem hóa đơn.
+    }
   }
 
-  List<_FeeItem> _extractFeeItems(InvoiceResult inv, Map<String, dynamic>? snapshot) {
-    final List<dynamic>? snapItems = snapshot?['items'] as List<dynamic>?;
-
-    if (inv.details.isNotEmpty) {
-      return inv.details.map((d) {
-        Map<String, dynamic>? match;
-        if (snapItems != null) {
-          for (final item in snapItems) {
-            if (item is Map<String, dynamic>) {
-              final sId = item['serviceId'];
-              final sName = (item['serviceName'] ?? '').toString().toLowerCase();
-              if ((d.serviceId != 0 && sId == d.serviceId) ||
-                  (d.serviceName.isNotEmpty && sName == d.serviceName.toLowerCase()) ||
-                  (d.serviceName.isEmpty && sName.isNotEmpty)) {
-                match = item;
-                break;
-              }
-            }
-          }
-        }
-
-        final name = d.serviceName.isNotEmpty
-            ? d.serviceName
-            : (match?['serviceName']?.toString() ?? 'Dịch vụ');
-
-        final isMeter = name.toLowerCase().contains('điện') || name.toLowerCase().contains('nước');
-        final cType = match?['chargeType']?.toString() ??
-            (d.chargeType.isNotEmpty ? d.chargeType : (isMeter ? 'PER_INDEX' : 'FIXED'));
-
-        final oldR = d.oldReading ?? (match?['oldReading'] as num?)?.toDouble();
-        final newR = d.newReading ?? (match?['newReading'] as num?)?.toDouble();
-
-        double? cons = d.consumption;
-        if (cons == null && newR != null && oldR != null) {
-          cons = (newR - oldR).clamp(0, double.infinity).toDouble();
-        }
-        cons ??= (match?['quantity'] as num?)?.toDouble() ??
-            (match?['activeResidents'] as num?)?.toDouble();
-
-        final uPrice = d.unitPrice > 0 ? d.unitPrice : ((match?['basePrice'] as num?)?.toDouble() ?? 0);
-        double total = d.totalCost > 0 ? d.totalCost : (match != null ? _calculateItemCost(match) : 0);
-        if (total == 0 && uPrice > 0) {
-          if (cType == 'FIXED') {
-            total = uPrice;
-          } else if (cons != null && cons > 0) {
-            total = cons * uPrice;
-          }
-        }
-
-        return _FeeItem(
-          serviceName: name,
-          chargeType: cType,
-          oldReading: oldR,
-          newReading: newR,
-          consumption: cons,
-          unitPrice: uPrice,
-          totalCost: total,
-        );
-      }).toList();
+  void _copySummary(InvoiceResult inv, List<InvoiceLine> lines) {
+    final sb = StringBuffer()
+      ..writeln('HÓA ĐƠN #${inv.id} - ${inv.roomLabel}')
+      ..writeln('Kỳ: ${formatBillingMonth(inv.billingMonth)} · Hạn: ${formatDateVi(inv.dueDate)}')
+      ..writeln('Trạng thái: ${invoiceStatusLabel(inv.status)}');
+    for (final l in lines) {
+      sb.writeln('• ${l.name}: ${formatVnd(l.amount)}');
     }
-
-    // Fallback if details is empty: construct from snapshot items
-    if (snapItems != null && snapItems.isNotEmpty) {
-      return snapItems.whereType<Map<String, dynamic>>().map((item) {
-        final name = item['serviceName']?.toString() ?? 'Dịch vụ';
-        final isMeter = name.toLowerCase().contains('điện') || name.toLowerCase().contains('nước');
-        final cType = item['chargeType']?.toString() ?? (isMeter ? 'PER_INDEX' : 'FIXED');
-        final oldR = (item['oldReading'] as num?)?.toDouble();
-        final newR = (item['newReading'] as num?)?.toDouble();
-        double? cons;
-        if (cType == 'PER_INDEX' || cType == 'METERED') {
-          if (newR != null && oldR != null) {
-            cons = (newR - oldR).clamp(0, double.infinity).toDouble();
-          }
-        } else if (cType == 'PER_PERSON') {
-          cons = (item['activeResidents'] as num?)?.toDouble();
-        } else {
-          cons = (item['quantity'] as num?)?.toDouble();
-        }
-
-        final uPrice = (item['basePrice'] as num?)?.toDouble() ?? 0;
-        final total = _calculateItemCost(item);
-
-        return _FeeItem(
-          serviceName: name,
-          chargeType: cType,
-          oldReading: oldR,
-          newReading: newR,
-          consumption: cons,
-          unitPrice: uPrice,
-          totalCost: total,
-        );
-      }).toList();
-    }
-
-    return [];
-  }
-
-  void _copySummary(List<_FeeItem> feeItems) {
-    if (_invoice == null) return;
-    final inv = _invoice!;
-    final sb = StringBuffer();
-    sb.writeln('=== THÔNG TIN HÓA ĐƠN #${inv.id} ===');
-    sb.writeln('Phòng: ${inv.roomNumber != null ? 'P.${inv.roomNumber}' : 'P.${inv.roomId}'}');
-    sb.writeln('Kỳ thanh toán: ${_fmtMonth(inv.billingMonth)}');
-    sb.writeln('Hạn nộp: ${_fmtDate(inv.dueDate)}');
-    sb.writeln('Trạng thái: ${inv.status == 'PAID' ? 'Đã thanh toán' : inv.status == 'PARTIAL' ? 'Một phần' : 'Chưa thanh toán'}');
-    sb.writeln('---------------------------');
-    for (final d in feeItems) {
-      sb.writeln('• ${d.serviceName}: ${_fmt(d.totalCost)}đ');
-    }
-    sb.writeln('---------------------------');
-    sb.writeln('Tổng cộng: ${_fmt(inv.totalAmount)}đ');
-    sb.writeln('Đã thu: ${_fmt(inv.paidAmount)}đ');
-    sb.writeln('Còn nợ: ${_fmt(inv.totalAmount - inv.paidAmount)}đ');
-
+    sb
+      ..writeln('Tổng cộng: ${formatVnd(inv.totalAmount)}')
+      ..writeln('Đã thanh toán: ${formatVnd(inv.paidAmount)}')
+      ..writeln('Còn lại: ${formatVnd(inv.remainingAmount)}');
     Clipboard.setData(ClipboardData(text: sb.toString()));
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Đã sao chép tóm tắt hóa đơn vào bộ nhớ tạm!'),
+    showInvoiceSnack(context, 'Đã sao chép tóm tắt hóa đơn.');
+  }
+
+  Future<void> _recordPayment(InvoiceResult inv) async {
+    final ok = await showManualPaymentSheet(context, inv);
+    if (ok == true && mounted) {
+      showInvoiceSnack(context, 'Đã ghi nhận thanh toán cho hóa đơn #${inv.id}.');
+      _notifyChanged();
+      _fetchDetail();
+    }
+  }
+
+  Future<void> _adjust(InvoiceResult inv) async {
+    final reissued = await showInvoiceAdjustSheet(context, inv);
+    if (reissued != null && mounted) {
+      showInvoiceSnack(context, 'Đã hủy HĐ #${inv.id} và tái cấp HĐ #${reissued.id}.');
+      setState(() {
+        _invoiceId = reissued.id;
+        _invoice = reissued;
+        _payments = [];
+      });
+      _notifyChanged();
+    }
+  }
+
+  Future<void> _delete(InvoiceResult inv) async {
+    final ok = await showDeleteInvoiceDialog(context, inv);
+    if (ok == true && mounted) {
+      final messenger = ScaffoldMessenger.of(context);
+      Navigator.pop(context);
+      messenger.showSnackBar(SnackBar(
+        content: Text('Đã xóa hóa đơn #${inv.id}.'),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+      ));
+      _notifyChanged();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            const SizedBox(height: 12),
-            Container(
-              width: 44,
-              height: 5,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE2E8F0),
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // Header Bar
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(Icons.receipt_long_rounded, color: AppColors.primary, size: 22),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Chi tiết hóa đơn #${widget.invoiceId}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1E293B)),
+    final inv = _invoice;
+    return SheetFrame(
+      maxHeightFactor: 0.94,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SheetHeader(
+            icon: Icons.receipt_long_rounded,
+            title: 'Hóa đơn #$_invoiceId',
+            subtitle: inv != null ? '${inv.roomLabel} · ${formatBillingMonth(inv.billingMonth)}' : 'Đang tải...',
+          ),
+          Flexible(
+            child: _isLoading && inv == null
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 48),
+                    child: Center(child: CircularProgressIndicator(strokeWidth: 2.5)),
+                  )
+                : _error != null && inv == null
+                    ? Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.error_outline_rounded, size: 40, color: InvoiceTones.dangerText),
+                            const SizedBox(height: 10),
+                            Text(_error!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13)),
+                            const SizedBox(height: 16),
+                            OutlinedButton(
+                              style: InvoiceButtonStyles.outlined(),
+                              onPressed: _fetchDetail,
+                              child: const Text('Thử lại'),
+                            ),
+                          ],
                         ),
-                        Text(
-                          _invoice != null
-                              ? '${_invoice!.roomNumber != null ? 'Phòng P.${_invoice!.roomNumber}' : 'Phòng ${_invoice!.roomId}'} · ${_fmtMonth(_invoice!.billingMonth)}'
-                              : 'Đang tải thông tin...',
-                          style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
-                    splashRadius: 20,
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 20, thickness: 1, color: Color(0xFFF1F5F9)),
-
-            // Content
-            Flexible(
-              child: _isLoading && _invoice == null
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 40),
-                      child: Center(
-                        child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2.5),
-                      ),
-                    )
-                  : _error != null && _invoice == null
-                      ? Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Column(
-                            children: [
-                              const Icon(Icons.error_outline_rounded, size: 40, color: AppColors.danger),
-                              const SizedBox(height: 10),
-                              Text('Lỗi: $_error', textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: AppColors.textSecondaryLight)),
-                              const SizedBox(height: 16),
-                              ElevatedButton(onPressed: _fetchDetail, child: const Text('Thử lại')),
-                            ],
+                      )
+                    : inv == null
+                        ? const SizedBox.shrink()
+                        : RefreshIndicator(
+                            onRefresh: _fetchDetail,
+                            child: SingleChildScrollView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                              child: _content(inv),
+                            ),
                           ),
-                        )
-                      : _invoice != null
-                          ? SingleChildScrollView(
-                              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                              child: _buildInvoiceContent(_invoice!),
-                            )
-                          : const SizedBox.shrink(),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildInvoiceContent(InvoiceResult inv) {
-    final isPaid = inv.status == 'PAID';
-    final isPending = inv.status == 'PENDING' || inv.status == 'PARTIAL';
-    final remainingDebt = inv.totalAmount - inv.paidAmount;
-
-    // Parse snapshot items if available
-    Map<String, dynamic>? snapshot;
-    if (inv.calculationSnapshot != null && inv.calculationSnapshot!.isNotEmpty) {
-      try {
-        snapshot = jsonDecode(inv.calculationSnapshot!) as Map<String, dynamic>;
-      } catch (_) {}
-    }
-
-    final feeItems = _extractFeeItems(inv, snapshot);
-
+  Widget _content(InvoiceResult inv) {
+    final lines = buildInvoiceLines(inv);
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Room & Status Card
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8FAFC),
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        inv.roomNumber != null ? 'Phòng P.${inv.roomNumber}' : 'Phòng ${inv.roomId}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF1E293B)),
-                      ),
-                      const SizedBox(height: 2),
-                      Text('Mã hóa đơn: #${inv.id}', style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: AppColors.textSecondaryLight)),
-                    ],
-                  ),
-                  _buildStatusBadge(inv.status),
-                ],
-              ),
-              const Divider(height: 20, color: Color(0xFFE2E8F0)),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _metaInfo('Kỳ hóa đơn', _fmtMonth(inv.billingMonth)),
-                  _metaInfo('Hạn thanh toán', _fmtDate(inv.dueDate)),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 18),
-
-        // Section: Breakdown of fees (Chi tiết các khoản phí)
-        const Text(
-          'CHI TIẾT CÁC KHOẢN PHÍ',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSecondaryLight, letterSpacing: 0.5),
-        ),
-        const SizedBox(height: 10),
+        _headerCard(inv),
+        const SizedBox(height: 20),
+        const SectionLabel('Bảng kê các khoản'),
         Container(
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
+            border: Border.all(color: InvoiceTones.hairline),
           ),
-          child: feeItems.isEmpty
-              ? const Padding(
+          child: Column(
+            children: [
+              if (lines.isEmpty)
+                const Padding(
                   padding: EdgeInsets.all(20),
-                  child: Center(child: Text('Không có chi tiết các khoản phí', style: TextStyle(fontSize: 12, color: AppColors.textSecondaryLight))),
-                )
-              : ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: feeItems.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                  itemBuilder: (_, i) => _buildFeeItem(feeItems[i]),
+                  child: Text('Hóa đơn chưa có dòng chi tiết.', style: TextStyle(fontSize: 13, color: InvoiceTones.muted)),
                 ),
-        ),
-        const SizedBox(height: 18),
-
-        // Section: Breakdown Table (Bảng kê chi tiết các khoản tiền đóng góp)
-        const Text(
-          'BẢNG KÊ CHI TIẾT CÁC KHOẢN TIỀN ĐÓNG GÓP',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSecondaryLight, letterSpacing: 0.5),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-          ),
-          child: Column(
-            children: [
-              for (final f in feeItems) ...[
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(f.serviceName, style: const TextStyle(fontSize: 13, color: Color(0xFF334155), fontWeight: FontWeight.w500)),
-                      Text('${_fmt(f.totalCost)}đ', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF1E293B), fontFamily: 'monospace')),
+              for (var i = 0; i < lines.length; i++) ...[
+                if (i > 0) const Divider(height: 1, color: InvoiceTones.mist),
+                _lineTile(lines[i]),
+              ],
+              const Divider(height: 1, color: InvoiceTones.hairline),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    _sumRow('Tổng cộng hóa đơn', formatVnd(inv.totalAmount), bold: true),
+                    if (inv.balanceDeduction > 0) ...[
+                      const SizedBox(height: 8),
+                      _sumRow('Khấu trừ từ số dư', '-${formatVnd(inv.balanceDeduction)}', color: InvoiceTones.paidText),
                     ],
-                  ),
+                    const SizedBox(height: 8),
+                    _sumRow('Đã thanh toán', formatVnd(inv.paidAmount), color: InvoiceTones.paidText),
+                    const SizedBox(height: 8),
+                    _sumRow(
+                      'Còn phải đóng',
+                      formatVnd(inv.remainingAmount),
+                      bold: true,
+                      color: inv.remainingAmount > 0 && !inv.isVoid ? InvoiceTones.dangerText : InvoiceTones.paidText,
+                    ),
+                  ],
                 ),
-              ],
-              const Divider(height: 18, color: Color(0xFFE2E8F0)),
-              _summaryRow('Tổng cộng hóa đơn', '${_fmt(inv.totalAmount)}đ', bold: true, color: const Color(0xFFDC2626), size: 15),
-              const SizedBox(height: 6),
-              _summaryRow('Đã thanh toán', '${_fmt(inv.paidAmount)}đ', color: const Color(0xFF059669)),
-              const SizedBox(height: 6),
-              _summaryRow('Còn lại cần thanh toán', '${_fmt(remainingDebt)}đ', bold: true, color: isPaid ? const Color(0xFF059669) : AppColors.danger, size: 13),
-              if (inv.status == 'PARTIAL' && inv.totalAmount > 0) ...[
-                const SizedBox(height: 12),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: (inv.paidAmount / inv.totalAmount).clamp(0, 1),
-                    minHeight: 6,
-                    backgroundColor: const Color(0xFFF1F5F9),
-                    valueColor: const AlwaysStoppedAnimation(Color(0xFF059669)),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Tiến độ: ${(inv.paidAmount / inv.totalAmount * 100).toStringAsFixed(1)}%',
-                  style: const TextStyle(fontSize: 10, color: AppColors.textSecondaryLight),
-                ),
-              ],
+              ),
             ],
           ),
         ),
-
-        // Section: System Automatic Formulas if snapshot exists
-        if (snapshot != null && snapshot['items'] is List && (snapshot['items'] as List).isNotEmpty) ...[
-          const SizedBox(height: 18),
-          const Text(
-            'CÔNG THỨC TÍNH CHI TIẾT (HỆ THỐNG TỰ ĐỘNG)',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textSecondaryLight, letterSpacing: 0.5),
-          ),
-          const SizedBox(height: 10),
+        if (_payments.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          const SectionLabel('Các lần thanh toán'),
           Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
+              border: Border.all(color: InvoiceTones.hairline),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final item in (snapshot['items'] as List))
-                  _buildFormulaItem(item as Map<String, dynamic>),
+                for (final p in _payments)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(formatDateVi(p.paidAt, withTime: true),
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: InvoiceTones.heading)),
+                              Text('${paymentMethodLabel(p.paymentMethod)} · ${p.transactionRef ?? ''}',
+                                  style: const TextStyle(fontSize: 12, color: InvoiceTones.muted),
+                                  overflow: TextOverflow.ellipsis),
+                            ],
+                          ),
+                        ),
+                        Text(formatVnd(p.amount),
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: InvoiceTones.paidText)),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
         ],
-
-        const SizedBox(height: 24),
-
-        // Footer Actions
-        if (isPending) ...[
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
+        if (inv.isUnpaid && inv.remainingAmount > 0) ...[
+          const SizedBox(height: 20),
+          const SectionLabel('Thanh toán VietQR'),
+          VietQrInlinePanel(key: ValueKey('qr-${inv.id}-${inv.remainingAmount}'), invoiceId: inv.id),
+          if (!widget.isManager) ...[
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              style: InvoiceButtonStyles.confirm(),
               onPressed: () {
                 Navigator.pop(context);
-                VietQrPaymentSheet.show(
-                  context,
-                  invoiceId: inv.id,
-                  onSuccess: widget.onPaymentSuccess,
-                );
+                VietQrPaymentSheet.show(context, invoiceId: inv.id, onSuccess: widget.onPaymentSuccess ?? widget.onChanged);
               },
-              icon: const Icon(Icons.qr_code_2_rounded, size: 20),
-              label: const Text('Thanh toán bằng VietQR ➜', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF059669),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-        ],
-
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => _copySummary(feeItems),
-                icon: const Icon(Icons.copy_rounded, size: 16),
-                label: const Text('Sao chép tóm tắt', style: TextStyle(fontSize: 12)),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  side: const BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => Navigator.pop(context),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  side: const BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-                child: const Text('Đóng', style: TextStyle(color: AppColors.textSecondaryLight, fontSize: 12)),
-              ),
+              icon: const Icon(Icons.qr_code_2_rounded),
+              label: const Text('Thanh toán VietQR'),
             ),
           ],
+        ],
+        if (widget.isManager) ..._managerActions(inv),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          style: InvoiceButtonStyles.outlined(),
+          onPressed: () => _copySummary(inv, lines),
+          icon: const Icon(Icons.copy_rounded, size: 18),
+          label: const Text('Sao chép tóm tắt'),
         ),
       ],
     );
   }
 
-  Widget _metaInfo(String label, String value) => Column(
+  List<Widget> _managerActions(InvoiceResult inv) {
+    if (inv.isVoid) return const [];
+    return [
+      const SizedBox(height: 20),
+      const SectionLabel('Thao tác'),
+      if (inv.isUnpaid)
+        ElevatedButton.icon(
+          style: InvoiceButtonStyles.confirm(),
+          onPressed: () => _recordPayment(inv),
+          icon: const Icon(Icons.payments_rounded),
+          label: const Text('Ghi nhận đã thu'),
+        ),
+      if (inv.canAdjust) ...[
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                style: InvoiceButtonStyles.outlined(foreground: AppColors.primary),
+                onPressed: () => _adjust(inv),
+                icon: const Icon(Icons.edit_note_rounded),
+                label: const Text('Hủy & tái cấp'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: OutlinedButton.icon(
+                style: InvoiceButtonStyles.outlined(foreground: InvoiceTones.dangerText),
+                onPressed: () => _delete(inv),
+                icon: const Icon(Icons.delete_outline_rounded),
+                label: const Text('Xóa'),
+              ),
+            ),
+          ],
+        ),
+      ] else if (inv.status == 'PARTIAL' || inv.status == 'PAID')
+        Container(
+          margin: const EdgeInsets.only(top: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: InvoiceTones.paper,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: InvoiceTones.hairline),
+          ),
+          child: const Text(
+            'Không thể hủy hoặc xóa hóa đơn đã có giao dịch. Vui lòng khấu trừ vào kỳ sau.',
+            style: TextStyle(fontSize: 13, color: InvoiceTones.heading),
+          ),
+        ),
+    ];
+  }
+
+  Widget _headerCard(InvoiceResult inv) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: InvoiceTones.paper,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: InvoiceTones.hairline),
+      ),
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight)),
+          Row(
+            children: [
+              Expanded(
+                child: Text(inv.roomLabel,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: InvoiceTones.heading)),
+              ),
+              InvoiceStatusBadge(inv.status),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(child: _meta('Kỳ hóa đơn', formatBillingMonth(inv.billingMonth))),
+              Expanded(child: _meta('Hạn thanh toán', formatDateVi(inv.dueDate))),
+            ],
+          ),
+          if (inv.replacesInvoiceId != null) ...[
+            const SizedBox(height: 10),
+            Text('Tái cấp thay cho hóa đơn #${inv.replacesInvoiceId}',
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.primaryDark)),
+          ],
+          if (inv.cancelReason != null && inv.cancelReason!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.danger.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text('Lý do hủy: ${inv.cancelReason}',
+                  style: const TextStyle(fontSize: 13, color: InvoiceTones.dangerText)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _meta(String label, String value) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12, color: InvoiceTones.muted)),
           const SizedBox(height: 2),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF1E293B))),
+          Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: InvoiceTones.heading)),
         ],
       );
 
-  Widget _buildFeeItem(_FeeItem detail) {
-    final chargeLabel = _getChargeLabel(detail.chargeType, detail.serviceName);
-    final isMeter = detail.chargeType == 'PER_INDEX' ||
-        detail.chargeType == 'METERED' ||
-        detail.serviceName.toLowerCase().contains('điện') ||
-        detail.serviceName.toLowerCase().contains('nước');
-    final isWater = detail.serviceName.toLowerCase().contains('nước');
-    final meterUnit = isWater ? 'khối' : 'số';
-
+  Widget _lineTile(InvoiceLine l) {
+    final sub = <String>[];
+    if (l.isMeter) {
+      sub.add('Chỉ số ${l.oldReading!.toStringAsFixed(0)} → ${l.newReading!.toStringAsFixed(0)}'
+          ' · dùng ${l.consumption!.toStringAsFixed(0)} ${l.meterUnit}');
+    }
+    if (!l.isAdjustment && l.unitPrice > 0 && l.quantity != null && l.quantity! > 0) {
+      final qty = l.quantity!;
+      final qtyText = qty == qty.roundToDouble() ? qty.toStringAsFixed(0) : qty.toStringAsFixed(2);
+      sub.add('$qtyText × ${formatVnd(l.unitPrice)}');
+    }
+    final amountColor = l.isAdjustment
+        ? (l.amount < 0 ? InvoiceTones.paidText : InvoiceTones.dangerText)
+        : InvoiceTones.heading;
     return Padding(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -660,157 +457,34 @@ class _InvoiceDetailSheetState extends State<InvoiceDetailSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  detail.serviceName,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF1F5F9),
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: Text(
-                        'Loại: $chargeLabel',
-                        style: const TextStyle(fontSize: 10, color: Color(0xFF475569), fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 5),
-                if (isMeter && detail.oldReading != null && detail.newReading != null) ...[
-                  Text(
-                    'Chỉ số: ${detail.oldReading!.toStringAsFixed(0)} → ${detail.newReading!.toStringAsFixed(0)} (dùng ${detail.consumption?.toStringAsFixed(0) ?? (detail.newReading! - detail.oldReading!).toStringAsFixed(0)} $meterUnit)',
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF0284C7), fontWeight: FontWeight.w600),
+                Text(l.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: InvoiceTones.heading)),
+                for (final s in sub)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(s, style: const TextStyle(fontSize: 12, color: InvoiceTones.muted)),
                   ),
-                ] else if (isMeter && detail.consumption != null && detail.consumption! > 0) ...[
-                  Text(
-                    'Tiêu thụ: ${detail.consumption!.toStringAsFixed(0)} $meterUnit',
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF0284C7), fontWeight: FontWeight.w600),
-                  ),
-                ] else if (detail.chargeType == 'PER_PERSON' && detail.consumption != null) ...[
-                  Text(
-                    'Số người: ${detail.consumption!.toStringAsFixed(0)} người',
-                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight),
-                  ),
-                ] else if (detail.consumption != null && detail.consumption! > 1) ...[
-                  Text(
-                    'Số lượng: ${detail.consumption!.toStringAsFixed(0)}',
-                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight),
-                  ),
-                ],
-                if (detail.unitPrice > 0) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'Đơn giá: ${_fmt(detail.unitPrice)}đ${isMeter ? '/$meterUnit' : detail.chargeType == 'PER_PERSON' ? '/người' : ''}',
-                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight),
-                  ),
-                ],
               ],
             ),
           ),
-          Text(
-            '${_fmt(detail.totalCost)}đ',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
-          ),
+          const SizedBox(width: 12),
+          Text(formatVnd(l.amount), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: amountColor)),
         ],
       ),
     );
   }
 
-  Widget _summaryRow(String label, String value, {bool bold = false, Color? color, double size = 12}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: TextStyle(fontSize: size, color: AppColors.textSecondaryLight)),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: size,
-            fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-            color: color ?? const Color(0xFF1E293B),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFormulaItem(Map<String, dynamic> item) {
-    final serviceName = item['serviceName'] ?? 'Dịch vụ';
-    final chargeType = item['chargeType'] ?? '';
-    final basePrice = (item['basePrice'] as num?)?.toDouble() ?? 0;
-
-    String explanation = '';
-    if (chargeType == 'FIXED') {
-      explanation = 'Phí cố định hàng tháng = ${_fmt(basePrice)} đ';
-    } else if (chargeType == 'PER_PERSON') {
-      final residents = item['activeResidents'] ?? 1;
-      explanation = '${_fmt(basePrice)} đ/người × $residents người = ${_fmt(basePrice * (residents as num))} đ';
-    } else if (chargeType == 'PER_QUANTITY') {
-      final qty = item['quantity'] ?? 1;
-      explanation = '${_fmt(basePrice)} đ × $qty đơn vị = ${_fmt(basePrice * (qty as num))} đ';
-    } else if (chargeType == 'PER_INDEX' || chargeType == 'METERED') {
-      final oldR = (item['oldReading'] as num?)?.toDouble() ?? 0;
-      final newR = (item['newReading'] as num?)?.toDouble() ?? 0;
-      final cons = (newR - oldR).clamp(0, double.infinity);
-      final tiers = item['pricingTiers'] as List?;
-      if (tiers != null && tiers.isNotEmpty) {
-        explanation = 'Tiêu thụ: $newR - $oldR = ${cons.toStringAsFixed(0)} đơn vị (tính theo bậc thang)';
-      } else {
-        explanation = '($newR - $oldR) × ${_fmt(basePrice)} đ = ${_fmt(cons * basePrice)} đ';
-      }
-    }
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _sumRow(String label, String value, {bool bold = false, Color? color}) => Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(serviceName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF1E293B))),
-          const SizedBox(height: 2),
+          Text(label, style: TextStyle(fontSize: 13, color: bold ? InvoiceTones.heading : InvoiceTones.muted)),
           Text(
-            explanation,
-            style: const TextStyle(fontSize: 10, color: Color(0xFF64748B), fontFamily: 'monospace'),
+            value,
+            style: TextStyle(
+              fontSize: bold ? 17 : 14,
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w700,
+              color: color ?? InvoiceTones.ink,
+            ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildStatusBadge(String status) {
-    Color color;
-    String label;
-    switch (status) {
-      case 'PAID':
-        color = const Color(0xFF059669);
-        label = 'Đã thanh toán';
-        break;
-      case 'PARTIAL':
-        color = const Color(0xFF0284C7);
-        label = 'Một phần';
-        break;
-      case 'VOID':
-      case 'CANCELLED':
-        color = AppColors.danger;
-        label = 'Đã hủy';
-        break;
-      default:
-        color = const Color(0xFFD97706);
-        label = 'Chưa thanh toán';
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
-      ),
-    );
-  }
+      );
 }
