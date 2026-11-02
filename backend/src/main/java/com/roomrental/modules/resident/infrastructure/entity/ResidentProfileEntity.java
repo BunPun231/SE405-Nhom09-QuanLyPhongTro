@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -42,6 +43,18 @@ public class ResidentProfileEntity {
     @Convert(converter = AesCryptoConverter.class)
     @Column(name = "bank_name", length = 100)
     private String bankName;
+
+    /** UC49: Ngày sinh (V9001). */
+    @Column(name = "date_of_birth")
+    private LocalDate dateOfBirth;
+
+    /** UC49: Giới tính MALE | FEMALE | OTHER (V9001). */
+    @Column(name = "gender", length = 10)
+    private String gender;
+
+    /** UC53: Ghi chú của Quản lý (V9001). */
+    @Column(name = "notes")
+    private String notes;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
