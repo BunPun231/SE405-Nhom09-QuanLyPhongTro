@@ -39,6 +39,10 @@ import com.roomrental.modules.finance.domain.model.ServiceUsage.ServiceUsageStat
 import com.roomrental.modules.finance.domain.repository.ServiceUsageRepository;
 import com.roomrental.modules.finance.domain.model.MeterReading;
 import com.roomrental.modules.finance.domain.repository.MeterReadingRepository;
+import com.roomrental.modules.finance.domain.model.Invoice;
+import com.roomrental.modules.finance.domain.repository.InvoiceRepository;
+import com.roomrental.modules.contract.application.dto.ContractInvoiceSummary;
+import com.roomrental.modules.contract.application.dto.DepositCollectCommand;
 import com.roomrental.modules.service.domain.model.ChargeType;
 import com.roomrental.modules.service.domain.model.RentalService;
 import com.roomrental.modules.service.domain.repository.RentalServiceRepository;
@@ -74,6 +78,8 @@ public class ContractService {
     private final MeterReadingRepository meterReadingRepository;
     private final ContractAdjustmentStrategyFactory strategyFactory;
     private final ApplicationEventPublisher eventPublisher;
+    private final InvoiceRepository invoiceRepository;
+    private final com.roomrental.modules.finance.application.service.CloudinaryService cloudinaryService;
 
     public ContractService(
             ContractRepository contractRepository,
@@ -87,8 +93,12 @@ public class ContractService {
             RentalServiceRepository rentalServiceRepository,
             MeterReadingRepository meterReadingRepository,
             ContractAdjustmentStrategyFactory strategyFactory,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            InvoiceRepository invoiceRepository,
+            com.roomrental.modules.finance.application.service.CloudinaryService cloudinaryService
     ) {
+        this.invoiceRepository = invoiceRepository;
+        this.cloudinaryService = cloudinaryService;
         this.contractRepository = contractRepository;
         this.contractResidentRepository = contractResidentRepository;
         this.contractAppendixRepository = contractAppendixRepository;
@@ -260,6 +270,58 @@ public class ContractService {
     }
 
     @Transactional(readOnly = true)
+    public Page<ContractResult> listByMotelAndRoom(Long motelId, Long roomId, String status, Pageable pageable) {
+        UUID tenantId = requireTenantId();
+        return contractRepository.findByTenantIdAndMotelIdAndRoomId(tenantId, motelId, roomId, status, pageable)
+                .map(this::toResult);
+    }
+
+    /**
+     * US63.3: Dinh kem ban scan / mau hop dong. Anh duoc luu tren Cloudinary va lien ket
+     * voi hop dong duoi dang ban ghi phu luc loai ATTACHMENT (metadata chua ten va URL).
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ContractAppendixResult addAttachment(Long contractId, String fileName, String base64Data) {
+        UUID tenantId = requireTenantId();
+        Contract contract = contractRepository.findByIdAndTenantId(contractId, tenantId)
+                .orElseThrow(() -> BaseException.notFound("Contract", contractId));
+        if (base64Data == null || base64Data.isBlank()) {
+            throw BaseException.badRequest("Vui long chon tep dinh kem");
+        }
+        String raw = base64Data.startsWith("data:") && base64Data.contains(",")
+                ? base64Data.substring(base64Data.indexOf(',') + 1)
+                : base64Data;
+        byte[] bytes;
+        try {
+            bytes = java.util.Base64.getDecoder().decode(raw.trim());
+        } catch (IllegalArgumentException ex) {
+            throw BaseException.badRequest("Tep dinh kem khong hop le");
+        }
+        if (bytes.length > 8 * 1024 * 1024) {
+            throw BaseException.badRequest("Tep dinh kem vuot qua 8MB");
+        }
+        if (cloudinaryService == null) {
+            throw BaseException.badRequest("Chua cau hinh luu tru tep");
+        }
+        String url;
+        try {
+            url = cloudinaryService.uploadImage(bytes, "contracts/" + contract.getId());
+        } catch (Exception ex) {
+            throw BaseException.badRequest("Khong tai duoc tep len, vui long thu lai");
+        }
+        String name = fileName != null && !fileName.isBlank() ? fileName.trim() : "tai-lieu.jpg";
+        ContractAppendix attachment = new ContractAppendix();
+        attachment.setTenantId(tenantId);
+        attachment.setContractId(contract.getId());
+        attachment.setEffectiveDate(LocalDate.now());
+        attachment.setAppendixType("ATTACHMENT");
+        attachment.setMetadata("{\"name\":\"" + jsonEscape(name) + "\",\"url\":\"" + jsonEscape(url) + "\"}");
+        attachment.setCreatedBy(SecurityUtils.getCurrentUserId());
+        attachment.setCreatedAt(LocalDateTime.now());
+        return toAppendixResult(contractAppendixRepository.save(attachment));
+    }
+
+    @Transactional(readOnly = true)
     public Page<ContractResult> listExpiringByMotel(Long motelId, LocalDate fromDate, LocalDate toDate, Pageable pageable) {
         UUID tenantId = requireTenantId();
         return contractRepository.findExpiringByTenantIdAndMotelId(tenantId, motelId, fromDate, toDate, pageable)
@@ -271,6 +333,7 @@ public class ContractService {
         UUID tenantId = requireTenantId();
         Contract contract = contractRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> BaseException.notFound("Contract", id));
+        assertCanView(contract);
         return toResult(contract);
     }
 
@@ -279,9 +342,25 @@ public class ContractService {
         UUID tenantId = requireTenantId();
         Contract contract = contractRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> BaseException.notFound("Contract", id));
+        assertCanView(contract);
 
         com.roomrental.modules.room.domain.model.Room room = roomRepository.findById(contract.getRoomId()).orElse(null);
         Long motelId = room != null ? room.getMotelId() : null;
+        String roomNumber = room != null ? room.getRoomNumber() : null;
+        String motelName = motelId != null
+                ? motelRepository.findByIdAndTenantId(motelId, tenantId).map(m -> m.getName()).orElse(null)
+                : null;
+        String residentName = null;
+        String residentPhone = null;
+        try {
+            var resident = residentService.get(contract.getPrimaryResidentUserId());
+            if (resident != null) {
+                residentName = resident.fullName();
+                residentPhone = resident.phone();
+            }
+        } catch (RuntimeException ignored) {
+            // Resident profile may be missing; detail is still returned.
+        }
 
         List<String> residentIds = contractResidentRepository.findByContractId(id).stream()
                 .map(r -> r.getResidentUserId().toString())
@@ -312,8 +391,83 @@ public class ContractService {
                 contract.getUpdatedAt(),
                 residentIds,
                 serviceItems,
-                (int) appendicesCount
+                (int) appendicesCount,
+                roomNumber,
+                motelName,
+                residentName,
+                residentPhone,
+                contract.getCancelReason(),
+                contract.getMoveOutReason()
         );
+    }
+
+    /**
+     * UC65: Hoa don / lich su thanh toan lien quan den hop dong.
+     * GET /api/contracts/{id}/invoices
+     */
+    @Transactional(readOnly = true)
+    public List<ContractInvoiceSummary> listInvoices(Long contractId) {
+        UUID tenantId = requireTenantId();
+        Contract contract = contractRepository.findByIdAndTenantId(contractId, tenantId)
+                .orElseThrow(() -> BaseException.notFound("Contract", contractId));
+        assertCanView(contract);
+        return findInvoices(contractId).stream()
+                .sorted(java.util.Comparator.comparing(
+                        Invoice::getBillingMonth,
+                        java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
+                .map(inv -> new ContractInvoiceSummary(
+                        inv.getId(),
+                        inv.getBillingMonth(),
+                        inv.getInvoiceType() != null ? inv.getInvoiceType().name() : null,
+                        inv.getStatus() != null ? inv.getStatus().name() : null,
+                        nz(inv.getTotalAmount()),
+                        nz(inv.getPaidAmount()),
+                        nz(inv.getBalanceDeduction()),
+                        remainingOf(inv),
+                        inv.getDueDate()
+                ))
+                .toList();
+    }
+
+    private List<Invoice> findInvoices(Long contractId) {
+        if (invoiceRepository == null) {
+            return List.of();
+        }
+        Page<Invoice> page = invoiceRepository.findByContractId(contractId, Pageable.unpaged());
+        return page != null ? page.getContent() : List.of();
+    }
+
+    private static BigDecimal nz(BigDecimal value) {
+        return value != null ? value : BigDecimal.ZERO;
+    }
+
+    private static BigDecimal remainingOf(Invoice invoice) {
+        BigDecimal remaining = nz(invoice.getTotalAmount())
+                .subtract(nz(invoice.getPaidAmount()))
+                .subtract(nz(invoice.getBalanceDeduction()));
+        return remaining.max(BigDecimal.ZERO);
+    }
+
+    /**
+     * BR65.1 / BR90: Khach thue chi duoc xem hop dong ma minh dung ten hoac o cung.
+     */
+    private void assertCanView(Contract contract) {
+        String role = SecurityUtils.getCurrentRole();
+        if (role == null || !role.equalsIgnoreCase("RESIDENT")) {
+            return;
+        }
+        UUID currentUserId = SecurityUtils.getCurrentUserId();
+        if (currentUserId == null) {
+            throw BaseException.forbidden("Ban khong co quyen xem hop dong nay");
+        }
+        if (currentUserId.equals(contract.getPrimaryResidentUserId())) {
+            return;
+        }
+        boolean member = contractResidentRepository.findByContractId(contract.getId()).stream()
+                .anyMatch(r -> currentUserId.equals(r.getResidentUserId()));
+        if (!member) {
+            throw BaseException.forbidden("Ban khong co quyen xem hop dong nay");
+        }
     }
 
     // ========================
@@ -324,8 +478,9 @@ public class ContractService {
     public Page<ContractAppendixResult> getAppendicesByContract(Long contractId, Pageable pageable) {
         UUID tenantId = requireTenantId();
         // Verify contract exists and belongs to tenant
-        contractRepository.findByIdAndTenantId(contractId, tenantId)
+        Contract contract = contractRepository.findByIdAndTenantId(contractId, tenantId)
                 .orElseThrow(() -> BaseException.notFound("Contract", contractId));
+        assertCanView(contract);
 
         return contractAppendixRepository.findByContractId(contractId, pageable)
                 .map(this::toAppendixResult);
@@ -338,8 +493,9 @@ public class ContractService {
 
         // Verify the parent contract belongs to the current tenant
         UUID tenantId = requireTenantId();
-        contractRepository.findByIdAndTenantId(appendix.getContractId(), tenantId)
+        Contract parent = contractRepository.findByIdAndTenantId(appendix.getContractId(), tenantId)
                 .orElseThrow(() -> BaseException.notFound("Contract", appendix.getContractId()));
+        assertCanView(parent);
 
         return toAppendixResult(appendix);
     }
@@ -350,9 +506,101 @@ public class ContractService {
         Contract contract = contractRepository.findByIdAndTenantId(id, tenantId)
             .orElseThrow(() -> BaseException.notFound("Contract", id));
 
-        String text = "Contract " + contract.getId() + " | Room " + contract.getRoomId() +
-            " | Start " + contract.getStartDate() + " | End " + contract.getEndDate();
-        return buildSimplePdf(text);
+        ContractDetailResult detail = getDetail(id);
+        List<ContractAppendix> appendices = contractAppendixRepository.findByContractId(id);
+        return buildSimplePdf(buildPdfLines(contract, detail, appendices));
+    }
+
+    /**
+     * UC68 / BR68.3-68.4: Noi dung PDF theo mau hop dong thue nha, gom day du dieu khoan,
+     * phu luc va khu vuc ky ten. Font PDF chuan (Helvetica) khong co dau tieng Viet nen
+     * van ban duoc bo dau; truong trong duoc dien "...".
+     */
+    List<String> buildPdfLines(Contract contract, ContractDetailResult detail, List<ContractAppendix> appendices) {
+        java.time.format.DateTimeFormatter df = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        java.util.function.Function<LocalDate, String> d = v -> v != null ? v.format(df) : "...";
+        List<String> lines = new ArrayList<>();
+        lines.add("CONG HOA XA HOI CHU NGHIA VIET NAM");
+        lines.add("Doc lap - Tu do - Hanh phuc");
+        lines.add("");
+        lines.add("HOP DONG THUE PHONG TRO");
+        lines.add("So hop dong: HD-" + contract.getId() + "    Ngay lap: "
+                + (contract.getCreatedAt() != null ? d.apply(contract.getCreatedAt().toLocalDate()) : "..."));
+        lines.add("");
+        lines.add("BEN CHO THUE (BEN A): Chu khu tro " + orDots(detail.motelName()));
+        lines.add("BEN THUE (BEN B): " + orDots(detail.primaryResidentFullName())
+                + "    SDT: " + orDots(detail.primaryResidentPhone()));
+        lines.add("So nguoi o: " + Math.max(1, detail.residentUserIds().size()));
+        lines.add("");
+        lines.add("DIEU 1. DOI TUONG HOP DONG");
+        lines.add("Phong: " + orDots(detail.roomNumber()) + "    Khu tro: " + orDots(detail.motelName()));
+        lines.add("DIEU 2. THOI HAN THUE");
+        lines.add("Tu ngay " + d.apply(contract.getStartDate()) + " den ngay " + d.apply(contract.getEndDate()));
+        lines.add("DIEU 3. GIA THUE VA TIEN COC");
+        lines.add("Gia thue: " + formatVnd(contract.getRentPrice()) + " / thang");
+        lines.add("Tien coc: " + formatVnd(contract.getDepositAmount()) + "    Trang thai coc: "
+                + depositLabel(contract.getDepositStatus()));
+        lines.add("Ky dong tien: " + (contract.getPaymentCycleMonths() != null ? contract.getPaymentCycleMonths() : 1)
+                + " thang/lan, chot so ngay " + (contract.getBillingCycleDay() != null ? contract.getBillingCycleDay() : "..."));
+        lines.add("DIEU 4. DICH VU DI KEM");
+        lines.add("So dich vu dang ky: " + (detail.serviceItems() != null ? detail.serviceItems().size() : 0)
+                + " (chi tiet theo bang gia dich vu cua khu tro)");
+        lines.add("DIEU 5. QUYEN VA NGHIA VU");
+        lines.add("Ben B thanh toan dung han, giu gin tai san; ben A ban giao phong dung hien trang.");
+        lines.add("Khi tra phong, hai ben tat toan: tien coc tru cong no, tien phong le ngay va phi hu hong.");
+        if (appendices != null && !appendices.isEmpty()) {
+            lines.add("");
+            lines.add("PHU LUC HOP DONG");
+            int i = 1;
+            for (ContractAppendix a : appendices) {
+                StringBuilder sb = new StringBuilder();
+                sb.append(i++).append(". ").append(a.getAppendixType())
+                        .append(" - hieu luc ").append(d.apply(a.getEffectiveDate()));
+                if (a.getNewRentPrice() != null) {
+                    sb.append(" - gia moi ").append(formatVnd(a.getNewRentPrice()));
+                }
+                lines.add(sb.toString());
+            }
+        }
+        lines.add("");
+        lines.add("DAI DIEN BEN A                                   DAI DIEN BEN B");
+        lines.add("(Ky, ghi ro ho ten)                              (Ky, ghi ro ho ten)");
+        lines.add("");
+        lines.add("");
+        lines.add("");
+        lines.add("....................................             ....................................");
+        return lines;
+    }
+
+    private static String orDots(String value) {
+        return value == null || value.isBlank() ? "..." : value;
+    }
+
+    private static String depositLabel(Contract.DepositStatus status) {
+        if (status == null) return "...";
+        return switch (status) {
+            case UNPAID -> "Chua thu";
+            case PAID -> "Da thu";
+            case REFUNDED -> "Da hoan";
+            case DEDUCTED -> "Da khau tru";
+        };
+    }
+
+    static String formatVnd(BigDecimal amount) {
+        if (amount == null) return "...";
+        java.text.DecimalFormatSymbols symbols = new java.text.DecimalFormatSymbols();
+        symbols.setGroupingSeparator('.');
+        java.text.DecimalFormat format = new java.text.DecimalFormat("#,##0", symbols);
+        return format.format(amount.setScale(0, java.math.RoundingMode.HALF_UP)) + " VND";
+    }
+
+    static String stripAccents(String input) {
+        if (input == null) return "";
+        String normalized = java.text.Normalizer.normalize(input, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replace('đ', 'd')
+                .replace('Đ', 'D');
+        return normalized.replaceAll("[^\\x20-\\x7E]", "?");
     }
 
     @Transactional(readOnly = true)
@@ -375,6 +623,11 @@ public class ContractService {
     public List<ContractResult> listByResident(String residentUserId) {
         UUID tenantId = requireTenantId();
         UUID residentId = UUID.fromString(residentUserId);
+        String role = SecurityUtils.getCurrentRole();
+        if (role != null && role.equalsIgnoreCase("RESIDENT")
+                && !residentId.equals(SecurityUtils.getCurrentUserId())) {
+            throw BaseException.forbidden("Ban chi duoc xem hop dong cua minh");
+        }
         return contractRepository.findByResidentUserId(tenantId, residentId).stream()
                 .map(this::toResult)
                 .toList();
@@ -386,6 +639,15 @@ public class ContractService {
 
     @Transactional(rollbackFor = Exception.class)
     public ContractAppendixResult adjust(Long contractId, ContractAdjustmentRequest request) {
+        return adjust(contractId, request, null);
+    }
+
+    /**
+     * UC66 voi ly do dieu chinh. Ly do duoc luu vao metadata cua phu luc va nhat ky audit.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ContractAppendixResult adjust(Long contractId, ContractAdjustmentRequest request, String reason) {
+        String trimmedReason = reason != null && !reason.isBlank() ? reason.trim() : null;
         UUID tenantId = SecurityUtils.requireTenantId();
         UUID actorId = SecurityUtils.getCurrentUserId();
         Contract contract = contractRepository.findByIdAndTenantId(contractId, tenantId)
@@ -398,6 +660,17 @@ public class ContractService {
         ContractAdjustmentType type = parseAdjustmentType(request.type());
         ContractAdjustmentStrategy strategy = strategyFactory.getStrategy(type);
         Long appendixId = strategy.process(contract, request);
+
+        if (trimmedReason != null) {
+            if (appendixId != null) {
+                contractAppendixRepository.findById(appendixId).ifPresent(appendix -> {
+                    appendix.setMetadata(mergeReason(appendix.getMetadata(), trimmedReason));
+                    contractAppendixRepository.save(appendix);
+                });
+            } else {
+                contract.setMoveOutReason(trimmedReason);
+            }
+        }
 
         contract.setUpdatedAt(LocalDateTime.now());
         contractRepository.save(contract);
@@ -412,7 +685,7 @@ public class ContractService {
 
         eventPublisher.publishEvent(new ContractAdjustedEvent(
                 tenantId, actorId, SecurityUtils.getCurrentRole(),
-                contractId, type.name()));
+                contractId, type.name(), trimmedReason));
 
         // Build result from the created appendix, or return minimal result
         if (appendixId != null) {
@@ -447,6 +720,33 @@ public class ContractService {
         if (contract.getStatus() == Contract.ContractStatus.LIQUIDATED) {
             throw BaseException.badRequest("Cannot cancel a liquidated contract");
         }
+        // BR67.3: Ly do huy la bat buoc.
+        if (reason == null || reason.isBlank()) {
+            throw BaseException.badRequest("Vui long nhap ly do huy hop dong");
+        }
+        if (contract.getStatus() == Contract.ContractStatus.PENDING_LIQUIDATION) {
+            throw BaseException.badRequest("Hop dong dang cho tat toan, vui long dung chuc nang Tat toan");
+        }
+        // BR67.2 / US67.1: Chan huy khi da phat sinh thanh toan hoac con cong no.
+        List<Invoice> invoices = findInvoices(contract.getId());
+        boolean hasPaidInvoice = invoices.stream()
+                .filter(inv -> inv.getStatus() != Invoice.InvoiceStatus.VOID)
+                .anyMatch(inv -> inv.getStatus() == Invoice.InvoiceStatus.PAID
+                        || nz(inv.getPaidAmount()).compareTo(BigDecimal.ZERO) > 0);
+        if (hasPaidInvoice) {
+            throw BaseException.conflict(
+                    "Hop dong da phat sinh hoa don da thanh toan, vui long dung chuc nang Tat toan thay vi Huy");
+        }
+        BigDecimal outstanding = invoices.stream()
+                .filter(inv -> inv.getStatus() == Invoice.InvoiceStatus.PENDING
+                        || inv.getStatus() == Invoice.InvoiceStatus.PARTIAL)
+                .map(ContractService::remainingOf)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (outstanding.compareTo(BigDecimal.ZERO) > 0) {
+            throw BaseException.conflict("Hop dong con cong no chua thanh toan (" + formatVnd(outstanding)
+                    + "), khong the huy");
+        }
+        reason = reason.trim();
 
         String oldStatus = contract.getStatus().name();
         contract.setStatus(Contract.ContractStatus.CANCELED);
@@ -475,6 +775,16 @@ public class ContractService {
 
     @Transactional(rollbackFor = Exception.class)
     public ContractResult collectDeposit(Long id) {
+        return collectDeposit(id, DepositCollectCommand.empty());
+    }
+
+    /**
+     * UC69 / US69.1: Ghi nhan thu coc voi so tien, ngay thu thuc te va phuong thuc.
+     * Giao dich duoc luu thanh mot ban ghi phu luc loai DEPOSIT_COLLECTED (lien ket hop dong)
+     * va ghi nhat ky audit.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public ContractResult collectDeposit(Long id, DepositCollectCommand command) {
         UUID tenantId = requireTenantId();
         Contract contract = contractRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> BaseException.notFound("Contract", id));
@@ -482,6 +792,44 @@ public class ContractService {
         if (contract.getDepositStatus() != Contract.DepositStatus.UNPAID) {
             throw BaseException.badRequest("Deposit must be UNPAID to collect");
         }
+        if (contract.getStatus() == Contract.ContractStatus.CANCELED
+                || contract.getStatus() == Contract.ContractStatus.LIQUIDATED) {
+            throw BaseException.badRequest("Hop dong da ket thuc, khong the thu coc");
+        }
+        DepositCollectCommand cmd = command != null ? command : DepositCollectCommand.empty();
+        BigDecimal amount = cmd.amount() != null ? cmd.amount() : contract.getDepositAmount();
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw BaseException.badRequest("So tien coc phai lon hon 0");
+        }
+        if (contract.getDepositAmount() != null && amount.compareTo(contract.getDepositAmount()) != 0) {
+            throw BaseException.badRequest("So tien thu phai bang so tien coc trong hop dong ("
+                    + formatVnd(contract.getDepositAmount()) + ")");
+        }
+        LocalDate collectedDate = cmd.collectedDate() != null ? cmd.collectedDate() : LocalDate.now();
+        if (collectedDate.isAfter(LocalDate.now())) {
+            throw BaseException.badRequest("Ngay thu khong duoc o tuong lai");
+        }
+        String method = cmd.paymentMethod() != null && !cmd.paymentMethod().isBlank()
+                ? cmd.paymentMethod().trim().toUpperCase()
+                : "CASH";
+        if (!method.equals("CASH") && !method.equals("BANK_TRANSFER")) {
+            throw BaseException.badRequest("paymentMethod: CASH hoac BANK_TRANSFER");
+        }
+        String depositMetadata = "{\"amount\":" + amount.toPlainString()
+                + ",\"collectedDate\":\"" + collectedDate + "\""
+                + ",\"paymentMethod\":\"" + method + "\""
+                + (cmd.note() != null && !cmd.note().isBlank() ? ",\"note\":\"" + jsonEscape(cmd.note().trim()) + "\"" : "")
+                + "}";
+
+        ContractAppendix depositRecord = new ContractAppendix();
+        depositRecord.setTenantId(tenantId);
+        depositRecord.setContractId(contract.getId());
+        depositRecord.setEffectiveDate(collectedDate);
+        depositRecord.setAppendixType("DEPOSIT_COLLECTED");
+        depositRecord.setMetadata(depositMetadata);
+        depositRecord.setCreatedBy(SecurityUtils.getCurrentUserId());
+        depositRecord.setCreatedAt(LocalDateTime.now());
+        contractAppendixRepository.save(depositRecord);
 
         String oldDepositStatus = contract.getDepositStatus().name();
         contract.setDepositStatus(Contract.DepositStatus.PAID);
@@ -510,8 +858,45 @@ public class ContractService {
         ContractResult result = toResult(saved);
         eventPublisher.publishEvent(new DepositCollectedEvent(
                 tenantId, SecurityUtils.getCurrentUserId(), SecurityUtils.getCurrentRole(),
-                result.id(), oldDepositStatus));
+                result.id(), oldDepositStatus, depositMetadata));
         return result;
+    }
+
+    static String jsonEscape(String value) {
+        StringBuilder sb = new StringBuilder();
+        for (char ch : value.toCharArray()) {
+            switch (ch) {
+                case '"' -> sb.append("\\\"");
+                case '\\' -> sb.append("\\\\");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
+                    if (ch < 0x20) {
+                        sb.append(String.format("\\u%04x", (int) ch));
+                    } else {
+                        sb.append(ch);
+                    }
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Gop ly do dieu chinh vao metadata JSON cua phu luc.
+     */
+    static String mergeReason(String metadata, String reason) {
+        String reasonField = "\"reason\":\"" + jsonEscape(reason) + "\"";
+        if (metadata == null || metadata.isBlank()) {
+            return "{" + reasonField + "}";
+        }
+        String trimmed = metadata.trim();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            String inner = trimmed.substring(1, trimmed.length() - 1).trim();
+            return inner.isEmpty() ? "{" + reasonField + "}" : "{" + inner + "," + reasonField + "}";
+        }
+        return "{\"note\":\"" + jsonEscape(trimmed) + "\"," + reasonField + "}";
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -748,9 +1133,14 @@ public class ContractService {
         );
     }
 
-    private byte[] buildSimplePdf(String text) {
-        String safeText = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)");
-        String contentStream = "BT /F1 12 Tf 50 750 Td (" + safeText + ") Tj ET";
+    private byte[] buildSimplePdf(List<String> lines) {
+        StringBuilder content = new StringBuilder("BT /F1 11 Tf 15 TL 50 760 Td\n");
+        for (String line : lines) {
+            String safeText = stripAccents(line).replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)");
+            content.append("(").append(safeText).append(") Tj T*\n");
+        }
+        content.append("ET");
+        String contentStream = content.toString();
         byte[] contentBytes = contentStream.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
 
         String obj1 = "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n";

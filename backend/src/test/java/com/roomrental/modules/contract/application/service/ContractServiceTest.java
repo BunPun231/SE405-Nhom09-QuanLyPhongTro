@@ -4,7 +4,12 @@ import com.roomrental.common.exception.BaseException;
 import com.roomrental.common.util.TenantContext;
 import com.roomrental.modules.contract.application.dto.ContractCreateCommand;
 import com.roomrental.modules.contract.application.dto.ContractResult;
+import com.roomrental.modules.contract.application.dto.DepositCollectCommand;
 import com.roomrental.modules.contract.domain.model.Contract;
+import com.roomrental.modules.contract.domain.model.ContractAppendix;
+import com.roomrental.modules.finance.domain.model.Invoice;
+import com.roomrental.modules.finance.domain.repository.InvoiceRepository;
+import org.springframework.data.domain.PageImpl;
 import com.roomrental.modules.contract.domain.repository.ContractAppendixRepository;
 import com.roomrental.modules.contract.domain.repository.ContractResidentRepository;
 import com.roomrental.modules.contract.domain.repository.ContractRepository;
@@ -37,6 +42,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -59,6 +65,7 @@ class ContractServiceTest {
     @Mock private com.roomrental.modules.finance.domain.repository.MeterReadingRepository meterReadingRepository;
     @Mock private com.roomrental.modules.contract.application.adjustment.ContractAdjustmentStrategyFactory strategyFactory;
     @Mock private org.springframework.context.ApplicationEventPublisher eventPublisher;
+    @Mock private InvoiceRepository invoiceRepository;
     @InjectMocks private ContractService contractService;
 
     private UUID tenantId;
@@ -219,6 +226,136 @@ class ContractServiceTest {
                 .isInstanceOf(BaseException.class);
     }
 
+    @Test
+    @DisplayName("UC67: Cancel requires a reason")
+    void cancel_requiresReason() {
+        Contract contract = baseContract(1L, Contract.ContractStatus.DRAFT);
+        when(contractRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(contract));
+
+        assertThatThrownBy(() -> contractService.cancel(1L, "  "))
+                .isInstanceOf(BaseException.class)
+                .hasMessageContaining("ly do");
+        verify(contractRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("UC67: Cancel is blocked when the contract has outstanding debt")
+    void cancel_blockedByOutstandingDebt() {
+        Contract contract = baseContract(1L, Contract.ContractStatus.ACTIVE);
+        when(contractRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(contract));
+        Invoice pending = new Invoice();
+        pending.setStatus(Invoice.InvoiceStatus.PENDING);
+        pending.setTotalAmount(new BigDecimal("1200000"));
+        pending.setPaidAmount(BigDecimal.ZERO);
+        when(invoiceRepository.findByContractId(eq(1L), any())).thenReturn(new PageImpl<>(List.of(pending)));
+
+        assertThatThrownBy(() -> contractService.cancel(1L, "Khach bo coc"))
+                .isInstanceOf(BaseException.class)
+                .hasMessageContaining("cong no");
+        verify(contractRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("UC67: Cancel is blocked when an invoice was already paid")
+    void cancel_blockedByPaidInvoice() {
+        Contract contract = baseContract(1L, Contract.ContractStatus.ACTIVE);
+        when(contractRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(contract));
+        Invoice paid = new Invoice();
+        paid.setStatus(Invoice.InvoiceStatus.PAID);
+        paid.setTotalAmount(new BigDecimal("1200000"));
+        paid.setPaidAmount(new BigDecimal("1200000"));
+        when(invoiceRepository.findByContractId(eq(1L), any())).thenReturn(new PageImpl<>(List.of(paid)));
+
+        assertThatThrownBy(() -> contractService.cancel(1L, "Thoa thuan lai"))
+                .isInstanceOf(BaseException.class)
+                .hasMessageContaining("Tat toan");
+    }
+
+    @Test
+    @DisplayName("UC67: Cancel with reason and no debt releases the room")
+    void cancel_withReason_releasesRoom() {
+        Contract contract = baseContract(1L, Contract.ContractStatus.DRAFT);
+        Room room = baseRoom();
+        room.setStatus(RoomStatus.DEPOSITED);
+        when(contractRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(contract));
+        when(invoiceRepository.findByContractId(eq(1L), any())).thenReturn(new PageImpl<>(List.of()));
+        when(contractRepository.save(any(Contract.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(roomRepository.findById(10L)).thenReturn(Optional.of(room));
+
+        ContractResult result = contractService.cancel(1L, " Khach bo coc ");
+
+        assertThat(result.status()).isEqualTo("CANCELED");
+        assertThat(contract.getCancelReason()).isEqualTo("Khach bo coc");
+        assertThat(room.getStatus()).isEqualTo(RoomStatus.EMPTY);
+    }
+
+    @Test
+    @DisplayName("UC69: Collect deposit records amount, date and method")
+    void collectDeposit_recordsTransaction() {
+        Contract contract = baseContract(1L, Contract.ContractStatus.DRAFT);
+        Room room = baseRoom();
+        when(contractRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(contract));
+        when(contractRepository.save(any(Contract.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(roomRepository.findById(10L)).thenReturn(Optional.of(room));
+
+        ContractResult result = contractService.collectDeposit(1L, new DepositCollectCommand(
+                new BigDecimal("5000000"), LocalDate.now().minusDays(1), "bank_transfer", "Chuyen khoan VCB"));
+
+        ArgumentCaptor<ContractAppendix> captor = ArgumentCaptor.forClass(ContractAppendix.class);
+        verify(contractAppendixRepository).save(captor.capture());
+        assertThat(captor.getValue().getAppendixType()).isEqualTo("DEPOSIT_COLLECTED");
+        assertThat(captor.getValue().getMetadata()).contains("\"paymentMethod\":\"BANK_TRANSFER\"").contains("5000000");
+        assertThat(result.depositStatus()).isEqualTo("PAID");
+        assertThat(result.status()).isEqualTo("ACTIVE");
+        assertThat(room.getStatus()).isEqualTo(RoomStatus.RENTED);
+    }
+
+    @Test
+    @DisplayName("UC69: Collect deposit rejects a wrong amount and future date")
+    void collectDeposit_validatesInput() {
+        Contract contract = baseContract(1L, Contract.ContractStatus.DRAFT);
+        when(contractRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(contract));
+
+        assertThatThrownBy(() -> contractService.collectDeposit(1L, new DepositCollectCommand(
+                new BigDecimal("100"), LocalDate.now(), "CASH", null)))
+                .isInstanceOf(BaseException.class);
+        assertThatThrownBy(() -> contractService.collectDeposit(1L, new DepositCollectCommand(
+                new BigDecimal("5000000"), LocalDate.now().plusDays(2), "CASH", null)))
+                .isInstanceOf(BaseException.class);
+        verify(contractAppendixRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("UC65: Resident cannot view another resident's contract")
+    void getDetail_residentIsolation() {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(userId.toString(), null,
+                        List.of(new SimpleGrantedAuthority("ROLE_RESIDENT"))));
+        Contract contract = baseContract(1L, Contract.ContractStatus.ACTIVE);
+        when(contractRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(contract));
+        when(contractResidentRepository.findByContractId(1L)).thenReturn(List.of());
+
+        assertThatThrownBy(() -> contractService.getDetail(1L))
+                .isInstanceOf(BaseException.class);
+    }
+
+    @Test
+    @DisplayName("UC66: Adjustment reason is merged into appendix metadata")
+    void mergeReason_buildsJson() {
+        assertThat(ContractService.mergeReason(null, "Tang gia"))
+                .isEqualTo("{\"reason\":\"Tang gia\"}");
+        assertThat(ContractService.mergeReason("{\"newEndDate\":\"2027-01-01\"}", "Gia han \"1 nam\""))
+                .isEqualTo("{\"newEndDate\":\"2027-01-01\",\"reason\":\"Gia han \\\"1 nam\\\"\"}");
+        assertThat(ContractService.mergeReason("Dieu khoan nuoi thu cung", "Bo sung"))
+                .isEqualTo("{\"note\":\"Dieu khoan nuoi thu cung\",\"reason\":\"Bo sung\"}");
+    }
+
+    @Test
+    @DisplayName("UC68: PDF text is ASCII and VND formatted")
+    void pdfHelpers_formatValues() {
+        assertThat(ContractService.formatVnd(new BigDecimal("3500000"))).isEqualTo("3.500.000 VND");
+        assertThat(ContractService.stripAccents("Hợp đồng Đà Nẵng")).isEqualTo("Hop dong Da Nang");
+    }
 
     private Contract baseContract(Long id, Contract.ContractStatus status) {
         Contract c = new Contract();

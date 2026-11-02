@@ -71,6 +71,14 @@ public class ContractRepositoryAdapter implements ContractRepository {
     }
 
     @Override
+    public Page<Contract> findByTenantIdAndMotelIdAndRoomId(UUID tenantId, Long motelId, Long roomId, String status, Pageable pageable) {
+        Page<ContractEntity> page = status == null || status.isBlank()
+                ? jpaRepository.findByTenantIdAndMotelIdAndRoomId(tenantId, motelId, roomId, pageable)
+                : jpaRepository.findByTenantIdAndMotelIdAndRoomIdAndStatus(tenantId, motelId, roomId, status, pageable);
+        return page.map(mapper::toDomain);
+    }
+
+    @Override
     public List<Contract> findByRoomId(Long roomId) {
         return jpaRepository.findByRoomId(roomId).stream()
                 .map(mapper::toDomain)

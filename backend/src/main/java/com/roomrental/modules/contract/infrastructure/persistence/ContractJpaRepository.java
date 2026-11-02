@@ -39,13 +39,32 @@ public interface ContractJpaRepository extends JpaRepository<ContractEntity, Lon
         );
 
         @Query("SELECT c FROM ContractEntity c WHERE c.tenantId = :tenantId AND " +
-           "c.endDate BETWEEN :fromDate AND :toDate AND " +
+           "c.status = 'ACTIVE' AND c.endDate BETWEEN :fromDate AND :toDate AND " +
            "c.roomId IN (SELECT r.id FROM RoomEntity r WHERE r.motelId = :motelId)")
         Page<ContractEntity> findExpiringByTenantIdAndMotelId(
             @Param("tenantId") UUID tenantId,
             @Param("motelId") Long motelId,
             @Param("fromDate") LocalDate fromDate,
             @Param("toDate") LocalDate toDate,
+            Pageable pageable
+        );
+
+        @Query("SELECT c FROM ContractEntity c WHERE c.tenantId = :tenantId AND c.roomId = :roomId AND " +
+           "c.roomId IN (SELECT r.id FROM RoomEntity r WHERE r.motelId = :motelId)")
+        Page<ContractEntity> findByTenantIdAndMotelIdAndRoomId(
+            @Param("tenantId") UUID tenantId,
+            @Param("motelId") Long motelId,
+            @Param("roomId") Long roomId,
+            Pageable pageable
+        );
+
+        @Query("SELECT c FROM ContractEntity c WHERE c.tenantId = :tenantId AND c.roomId = :roomId AND c.status = :status AND " +
+           "c.roomId IN (SELECT r.id FROM RoomEntity r WHERE r.motelId = :motelId)")
+        Page<ContractEntity> findByTenantIdAndMotelIdAndRoomIdAndStatus(
+            @Param("tenantId") UUID tenantId,
+            @Param("motelId") Long motelId,
+            @Param("roomId") Long roomId,
+            @Param("status") String status,
             Pageable pageable
         );
 

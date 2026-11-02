@@ -30,6 +30,12 @@ public record ContractDetailResult(
         LocalDateTime updatedAt,
         List<String> residentUserIds,
         List<ContractServiceItemResult> serviceItems,
-        int appendicesCount
+        int appendicesCount,
+        String roomNumber,
+        String motelName,
+        String primaryResidentFullName,
+        String primaryResidentPhone,
+        String cancelReason,
+        String moveOutReason
 ) {
 }

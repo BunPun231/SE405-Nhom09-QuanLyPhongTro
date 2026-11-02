@@ -11,6 +11,9 @@ import com.roomrental.modules.contract.application.dto.ContractServiceItemComman
 import com.roomrental.modules.contract.application.service.ContractService;
 import com.roomrental.modules.contract.interfaces.rest.dto.ContractAdjustmentRequestBody;
 import com.roomrental.modules.contract.interfaces.rest.dto.ContractCreateRequestBody;
+import com.roomrental.modules.contract.interfaces.rest.dto.DepositCollectRequestBody;
+import com.roomrental.modules.contract.application.dto.ContractInvoiceSummary;
+import com.roomrental.modules.contract.application.dto.DepositCollectCommand;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -146,12 +149,20 @@ public class ContractController {
             @RequestParam(required = false) String status,
             @Parameter(description = "Filter expiring contracts within next 30 days")
             @RequestParam(required = false, defaultValue = "false") boolean expiring,
+            @Parameter(description = "Filter by room")
+            @RequestParam(required = false) Long roomId,
             @Parameter(description = "From date (yyyy-MM-dd)")
             @RequestParam(required = false) LocalDate fromDate,
             @Parameter(description = "To date (yyyy-MM-dd)")
             @RequestParam(required = false) LocalDate toDate,
             @Parameter(description = "Page number (0-based), size, sort - e.g. sort=createdAt,desc")
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+
+        if (roomId != null) {
+            return ResponseEntity.ok(ApiResponse.ok(
+                    PageResponse.from(contractService.listByMotelAndRoom(motelId, roomId, status, pageable))
+            ));
+        }
 
         if (expiring) {
             LocalDate from = fromDate != null ? fromDate : LocalDate.now();
@@ -244,7 +255,7 @@ public class ContractController {
             body.applyToCurrentContracts(),
             body.newServicePrices()
         );
-        ContractAppendixResult result = contractService.adjust(contractId, request);
+        ContractAppendixResult result = contractService.adjust(contractId, request, body.reason());
         return ResponseEntity.ok(ApiResponse.ok(result, "Contract adjusted"));
     }
 
@@ -276,7 +287,37 @@ public class ContractController {
     @Operation(summary = "Collect deposit", description = "Mark deposit as PAID")
     @PostMapping("/{id}/deposit/collect")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
-    public ResponseEntity<ApiResponse<ContractResult>> collectDeposit(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.ok(contractService.collectDeposit(id), "Deposit collected"));
+    public ResponseEntity<ApiResponse<ContractResult>> collectDeposit(
+            @PathVariable Long id,
+            @RequestBody(required = false) DepositCollectRequestBody body) {
+        DepositCollectCommand command = body == null
+                ? DepositCollectCommand.empty()
+                : new DepositCollectCommand(body.amount(), body.collectedDate(), body.paymentMethod(), body.note());
+        return ResponseEntity.ok(ApiResponse.ok(contractService.collectDeposit(id, command), "Deposit collected"));
+    }
+
+    /**
+     * Dinh kem ban scan / mau hop dong (US63.3).
+     * POST /api/contracts/{id}/attachments
+     */
+    @PostMapping("/{id}/attachments")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    @Operation(summary = "Attach scanned document", description = "Upload a scanned contract page / template image")
+    public ResponseEntity<ApiResponse<ContractAppendixResult>> addAttachment(
+            @PathVariable Long id,
+            @Valid @RequestBody com.roomrental.modules.contract.interfaces.rest.dto.ContractAttachmentRequestBody body) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                contractService.addAttachment(id, body.fileName(), body.base64Data()), "Attachment added"));
+    }
+
+    /**
+     * Hoa don va lich su thanh toan cua hop dong (UC65).
+     * GET /api/contracts/{id}/invoices
+     */
+    @Operation(summary = "Contract invoices", description = "Invoices and payment history linked to a contract")
+    @GetMapping("/{id}/invoices")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN','RESIDENT')")
+    public ResponseEntity<ApiResponse<List<ContractInvoiceSummary>>> listInvoices(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(contractService.listInvoices(id)));
     }
 }
