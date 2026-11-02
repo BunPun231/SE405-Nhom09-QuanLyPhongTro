@@ -27,6 +27,9 @@ public interface ContractRepository {
 
     Page<Contract> findExpiringByTenantIdAndMotelId(UUID tenantId, Long motelId, LocalDate fromDate, LocalDate toDate, Pageable pageable);
 
+    /** UC64: Loc hop dong theo phong (va trang thai neu co). */
+    Page<Contract> findByTenantIdAndMotelIdAndRoomId(UUID tenantId, Long motelId, Long roomId, String status, Pageable pageable);
+
     List<Contract> findByRoomId(Long roomId);
 
     List<Contract> findActiveByTenantId(UUID tenantId);

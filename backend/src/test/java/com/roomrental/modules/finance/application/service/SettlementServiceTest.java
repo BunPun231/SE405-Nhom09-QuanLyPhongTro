@@ -66,6 +66,7 @@ class SettlementServiceTest {
     @Mock private TransactionRepository transactionRepository;
     @Mock private BillingStrategyFactory strategyFactory;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private CloudinaryService cloudinaryService;
     @InjectMocks private SettlementService settlementService;
 
     private UUID tenantId;
@@ -148,5 +149,44 @@ class SettlementServiceTest {
         verify(serviceUsageRepository).saveAll(captor.capture());
         assertThat(captor.getValue()).allSatisfy(saved ->
                 assertThat(saved.getStatus()).isEqualTo(ServiceUsage.ServiceUsageStatus.CANCELLED));
+    }
+
+    @Test
+    @DisplayName("UC80: Damage deduction without photo evidence is rejected")
+    void calculate_rejectsDamageWithoutEvidence() {
+        Contract contract = new Contract();
+        contract.setId(1L);
+        contract.setTenantId(tenantId);
+        contract.setRoomId(10L);
+        contract.setRentPrice(new BigDecimal("3000000"));
+        contract.setDepositAmount(new BigDecimal("3000000"));
+        contract.setDepositStatus(Contract.DepositStatus.PAID);
+        contract.setStatus(Contract.ContractStatus.ACTIVE);
+        when(contractRepository.findByIdAndTenantId(1L, tenantId)).thenReturn(Optional.of(contract));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> settlementService.calculate(
+                new com.roomrental.modules.finance.application.dto.SettlementCommand(
+                        1L, LocalDate.of(2026, 6, 2), null, null,
+                        List.of(new DamageItemInput("Vo kinh cua so", new BigDecimal("500000"), null)))))
+                .isInstanceOf(com.roomrental.common.exception.BaseException.class)
+                .hasMessageContaining("anh bang chung");
+    }
+
+    @Test
+    @DisplayName("UC80: Damage validation accepts zero fee without photo and rejects negative fee")
+    void validateDamages_rules() {
+        SettlementService.validateDamages(List.of(new DamageItemInput("Kiem tra", BigDecimal.ZERO, null)));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> SettlementService.validateDamages(
+                List.of(new DamageItemInput("Ghe", new BigDecimal("-1"), "x"))))
+                .isInstanceOf(com.roomrental.common.exception.BaseException.class);
+    }
+
+    @Test
+    @DisplayName("UC80: Repair fees are read back from the settlement snapshot")
+    void snapshotRepairFees_parsesJson() {
+        assertThat(SettlementService.snapshotRepairFees("{\"repairFees\":500000}"))
+                .isEqualByComparingTo("500000");
+        assertThat(SettlementService.snapshotRepairFees(null)).isEqualByComparingTo("0");
+        assertThat(SettlementService.snapshotRepairFees("not json")).isEqualByComparingTo("0");
     }
 }

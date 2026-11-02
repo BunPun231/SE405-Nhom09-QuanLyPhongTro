@@ -56,4 +56,22 @@ public class SettlementController {
         );
         return ResponseEntity.ok(service.confirmSettlement(cmd));
     }
+
+    @GetMapping("/{contractId}")
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    @Operation(summary = "Settlement status of a contract (UC80)")
+    public ResponseEntity<SettlementStatusResult> getStatus(@PathVariable Long contractId) {
+        return ResponseEntity.ok(service.getStatus(contractId));
+    }
+
+    @PostMapping("/{contractId}/finalize")
+    @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
+    @Operation(summary = "Close contract after extra payment, or close with bad debt (UC80 5b/5c)")
+    public ResponseEntity<SettlementStatusResult> finalizeSettlement(
+            @PathVariable Long contractId,
+            @RequestBody(required = false) com.roomrental.modules.finance.interfaces.rest.dto.SettlementFinalizeRequest request) {
+        boolean badDebt = request != null && request.closeAsBadDebt();
+        String note = request != null ? request.note() : null;
+        return ResponseEntity.ok(service.finalizeSettlement(contractId, badDebt, note));
+    }
 }

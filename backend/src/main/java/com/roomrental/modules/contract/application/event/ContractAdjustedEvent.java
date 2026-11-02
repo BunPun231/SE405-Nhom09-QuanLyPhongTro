@@ -5,10 +5,16 @@ import java.util.UUID;
 
 public record ContractAdjustedEvent(
         UUID tenantId, UUID actorId, String actorRole,
-        Long contractId, String adjustmentType
+        Long contractId, String adjustmentType, String reason
 ) implements LoggableEvent {
+    public ContractAdjustedEvent(UUID tenantId, UUID actorId, String actorRole,
+                                 Long contractId, String adjustmentType) {
+        this(tenantId, actorId, actorRole, contractId, adjustmentType, null);
+    }
+
     @Override public String action() { return "ADJUST_CONTRACT"; }
     @Override public String entityType() { return "Contract"; }
     @Override public String entityId() { return contractId.toString(); }
     @Override public String newValue() { return adjustmentType; }
+    @Override public String metadata() { return reason; }
 }
