@@ -28,6 +28,7 @@ public class ContractAppendixEntity {
     @Column(name = "new_rent_price", precision = 12, scale = 2)
     private BigDecimal newRentPrice;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "new_service_prices", columnDefinition = "jsonb")
     private String newServicePrices;
 

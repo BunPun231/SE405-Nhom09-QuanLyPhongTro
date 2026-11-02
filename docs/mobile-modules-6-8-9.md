@@ -76,3 +76,7 @@ Muốn xem UI cũ thì `git switch main` rồi chạy lại lệnh `flutter run`
 - `PageResponse` của mobile đọc khóa `number` trong khi backend trả `page`.
 - `ApiClient.delete` nên nhận `params`.
 - Xóa các hàm chỉ số điện nước cũ trong `invoice_service.dart`, vì màn hình đã chuyển sang `meter_reading_service.dart`.
+
+## Ảnh so sánh UI cũ và mới
+
+Thư mục `docs/screenshots-6-8-9/`: 8 cặp màn hình (trái là `main`, phải là nhánh này) chụp trên emulator Pixel với cùng dữ liệu `seed.js`, và 1 ảnh gồm các màn chỉ có ở bản mới.
