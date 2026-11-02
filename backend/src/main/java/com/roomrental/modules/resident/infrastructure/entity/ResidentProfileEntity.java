@@ -44,15 +44,15 @@ public class ResidentProfileEntity {
     @Column(name = "bank_name", length = 100)
     private String bankName;
 
-    /** UC49: Ngày sinh (V9001). */
+    /** UC49: Ngày sinh (V33). */
     @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
 
-    /** UC49: Giới tính MALE | FEMALE | OTHER (V9001). */
+    /** UC49: Giới tính MALE | FEMALE | OTHER (V33). */
     @Column(name = "gender", length = 10)
     private String gender;
 
-    /** UC53: Ghi chú của Quản lý (V9001). */
+    /** UC53: Ghi chú của Quản lý (V33). */
     @Column(name = "notes")
     private String notes;
 

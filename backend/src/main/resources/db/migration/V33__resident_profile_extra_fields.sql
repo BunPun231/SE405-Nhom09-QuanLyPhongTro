@@ -1,4 +1,4 @@
--- V9001 (Module VI - Khách thuê, UC49/UC53):
+-- V33 (Module VI - Khách thuê, UC49/UC53):
 -- Bổ sung ngày sinh, giới tính, ghi chú cho hồ sơ khách thuê.
 -- Đánh index họ tên/SĐT để tìm kiếm nhanh (BR50.8).
 ALTER TABLE resident_profiles ADD COLUMN IF NOT EXISTS date_of_birth DATE;
