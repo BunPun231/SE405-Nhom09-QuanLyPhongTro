@@ -51,9 +51,10 @@ public class InvoiceController {
     @PostMapping("/generate")
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
     @Operation(summary = "Generate invoices for a motel (UC73)")
-    public ResponseEntity<Void> generateForMotel(@RequestBody @Valid InvoiceGenerateRequest request) {
-        service.generateForMotel(new InvoiceGenerateCommand(request.motelId(), request.billingMonth()));
-        return ResponseEntity.accepted().build();
+    public ResponseEntity<InvoiceGenerationResult> generateForMotel(@RequestBody @Valid InvoiceGenerateRequest request) {
+        // Chạy đồng bộ để trả về số hóa đơn đã tạo và danh sách phòng bị bỏ qua (US73.1 - Audit).
+        return ResponseEntity.ok(service.generateForMotelNow(
+                new InvoiceGenerateCommand(request.motelId(), request.billingMonth())));
     }
 
     @GetMapping
@@ -62,16 +63,21 @@ public class InvoiceController {
     public ResponseEntity<Page<InvoiceResult>> list(
             @RequestParam(required = false) Long motelId,
             @RequestParam(required = false) String status,
+            @RequestParam(required = false) String billingMonth,
+            @RequestParam(required = false) Long roomId,
             Pageable pageable) {
-        return ResponseEntity.ok(service.list(motelId, status, pageable));
+        return ResponseEntity.ok(service.list(motelId, status, billingMonth, roomId, pageable));
     }
 
 
     @GetMapping("/me")
     @PreAuthorize("hasAnyRole('RESIDENT')")
     @Operation(summary = "List my invoices (UC74 - Tenant)")
-    public ResponseEntity<Page<InvoiceResult>> getMyInvoices(@RequestParam(required = false) String status, Pageable pageable) {
-        return ResponseEntity.ok(service.listMyInvoices(status, pageable));
+    public ResponseEntity<Page<InvoiceResult>> getMyInvoices(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String billingMonth,
+            Pageable pageable) {
+        return ResponseEntity.ok(service.listMyInvoices(status, billingMonth, pageable));
     }
 
     @GetMapping("/my-balance")
@@ -113,20 +119,24 @@ public class InvoiceController {
 
     @PostMapping("/{id}/adjust")
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
-    @Operation(summary = "Adjust/Void an invoice (UC76)")
+    @Operation(summary = "Void an invoice and reissue a corrected one (UC76)")
     public ResponseEntity<InvoiceResult> adjustInvoice(@PathVariable Long id,
             @RequestBody @Valid InvoiceAdjustRequest request) {
         InvoiceAdjustCommand cmd = new InvoiceAdjustCommand(
                 id, request.reason(), request.correctedReadings(),
-                request.customAdjustments());
+                request.customAdjustments(),
+                request.adjustments() == null ? java.util.List.of() : request.adjustments().stream()
+                        .map(a -> new InvoiceAdjustCommand.AdjustmentLine(a.description(), a.amount()))
+                        .toList());
         return ResponseEntity.ok(service.adjustInvoice(cmd));
     }
 
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
     @Operation(summary = "Soft delete an invoice (UC77)")
-    public ResponseEntity<Void> deleteInvoice(@PathVariable Long id) {
-        service.deleteInvoice(id);
+    public ResponseEntity<Void> deleteInvoice(@PathVariable Long id,
+            @RequestParam(required = false) String reason) {
+        service.deleteInvoice(id, reason);
         return ResponseEntity.noContent().build();
     }
 }

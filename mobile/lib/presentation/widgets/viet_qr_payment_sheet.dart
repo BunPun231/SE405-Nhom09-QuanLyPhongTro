@@ -1,13 +1,154 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../core/constants/app_colors.dart';
-import '../../../core/services/invoice_service.dart';
+import '../../core/constants/app_colors.dart';
+import '../../core/services/invoice_service.dart';
 
-String _fmt(double v) => v.toStringAsFixed(0).replaceAllMapped(
-      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]}.',
+String _fmt(double v) => formatVnd(v, withSymbol: false);
+
+/// UC75 / BR75.6: Khối VietQR nhúng trong chi tiết hóa đơn chưa thanh toán xong.
+/// Hiện mã QR động (số tiền = số còn nợ), số tài khoản và nội dung chuyển khoản.
+class VietQrInlinePanel extends StatefulWidget {
+  final int invoiceId;
+  const VietQrInlinePanel({super.key, required this.invoiceId});
+
+  @override
+  State<VietQrInlinePanel> createState() => _VietQrInlinePanelState();
+}
+
+class _VietQrInlinePanelState extends State<VietQrInlinePanel> {
+  InvoicePaymentInfoResult? _info;
+  String? _error;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final info = await InvoiceService.getPaymentInfo(widget.invoiceId);
+      if (mounted) {
+        setState(() {
+          _info = info;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString().replaceFirst('Exception: ', '');
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  void _copy(String text, String label) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text('Đã sao chép $label'),
+      duration: const Duration(seconds: 2),
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final box = BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: AppColors.borderLight),
     );
+    if (_loading) {
+      return Container(
+        height: 120,
+        decoration: box,
+        alignment: Alignment.center,
+        child: const CircularProgressIndicator(strokeWidth: 2.5),
+      );
+    }
+    if (_error != null || _info == null) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: box,
+        child: Row(
+          children: [
+            const Icon(Icons.qr_code_2_rounded, color: AppColors.textSecondaryLight),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(_error ?? 'Chưa có thông tin thanh toán.',
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B))),
+            ),
+            IconButton(tooltip: 'Tải lại mã QR', onPressed: _load, icon: const Icon(Icons.refresh_rounded)),
+          ],
+        ),
+      );
+    }
+    final info = _info!;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: box,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Image.network(
+              info.qrUrl,
+              width: 128,
+              height: 128,
+              fit: BoxFit.contain,
+              semanticLabel: 'Mã VietQR thanh toán hóa đơn #${widget.invoiceId}',
+              errorBuilder: (_, __, ___) => Container(
+                width: 128,
+                height: 128,
+                color: const Color(0xFFF1F5F9),
+                child: const Icon(Icons.qr_code_2_rounded, size: 56, color: AppColors.textSecondaryLight),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Số tiền', style: TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
+                Text('${_fmt(info.amount)}đ',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.primary)),
+                const SizedBox(height: 4),
+                Text('${info.bankName.isNotEmpty ? info.bankName : info.bankId} · ${info.bankAccount}',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))),
+                Text(info.accountHolder.toUpperCase(),
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text('Nội dung: ${info.memo}',
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w700, fontFamily: 'monospace', color: Color(0xFFB45309))),
+                    ),
+                    IconButton(
+                      tooltip: 'Sao chép nội dung chuyển khoản',
+                      onPressed: () => _copy(info.memo, 'nội dung chuyển khoản'),
+                      icon: const Icon(Icons.copy_rounded, size: 18, color: AppColors.primary),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class VietQrPaymentSheet extends StatefulWidget {
   final int invoiceId;
@@ -63,10 +204,15 @@ class _VietQrPaymentSheetState extends State<VietQrPaymentSheet> {
       if (!mounted || _isPaid) return;
       try {
         final inv = await InvoiceService.get(widget.invoiceId);
-        if (inv.status == 'PAID' && mounted) {
+        if (!mounted) return;
+        if (inv.status == 'PAID') {
           _pollingTimer?.cancel();
           setState(() => _isPaid = true);
           widget.onSuccess?.call();
+        } else if (_paymentInfo != null && inv.remainingAmount.round() != _paymentInfo!.amount.round()) {
+          // Nhận một phần tiền (UC78 - PARTIAL): tải lại mã QR với số còn nợ mới.
+          widget.onSuccess?.call();
+          _fetchPaymentInfo();
         }
       } catch (_) {}
     });
@@ -112,7 +258,7 @@ class _VietQrPaymentSheetState extends State<VietQrPaymentSheet> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Hóa đơn vẫn chưa thanh toán (Đã trả: ${_fmt(inv.paidAmount)}đ / Còn lại: ${_fmt(inv.totalAmount - inv.paidAmount)}đ).'),
+              content: Text('Chưa nhận đủ tiền (Đã trả: ${_fmt(inv.paidAmount)}đ / Còn lại: ${_fmt(inv.remainingAmount)}đ).'),
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
@@ -200,16 +346,16 @@ class _VietQrPaymentSheetState extends State<VietQrPaymentSheet> {
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF1E293B)),
                         ),
                         const Text(
-                          'Quét mã VietQR tự động xác nhận trong 30s',
-                          style: TextStyle(fontSize: 11, color: AppColors.textSecondaryLight),
+                          'Tự động xác nhận khi ngân hàng báo có tiền',
+                          style: TextStyle(fontSize: 12, color: AppColors.textSecondaryLight),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
+                    tooltip: 'Đóng',
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.close_rounded, color: AppColors.textSecondaryLight),
-                    splashRadius: 20,
                   ),
                 ],
               ),
@@ -467,33 +613,20 @@ class _VietQrPaymentSheetState extends State<VietQrPaymentSheet> {
                   Text(amountFormatted, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.primary)),
                 ],
               ),
-              InkWell(
-                onTap: () => _copy(info.amount.toStringAsFixed(0), 'amount', 'Số tiền'),
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _copiedKey == 'amount' ? Icons.check_rounded : Icons.copy_rounded,
-                        size: 13,
-                        color: _copiedKey == 'amount' ? const Color(0xFF059669) : AppColors.primary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _copiedKey == 'amount' ? 'Đã chép' : 'Sao chép',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: _copiedKey == 'amount' ? const Color(0xFF059669) : AppColors.primary,
-                        ),
-                      ),
-                    ],
+              TextButton.icon(
+                onPressed: () => _copy(info.amount.toStringAsFixed(0), 'amount', 'Số tiền'),
+                style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                icon: Icon(
+                  _copiedKey == 'amount' ? Icons.check_rounded : Icons.copy_rounded,
+                  size: 16,
+                  color: _copiedKey == 'amount' ? const Color(0xFF047857) : AppColors.primary,
+                ),
+                label: Text(
+                  _copiedKey == 'amount' ? 'Đã chép' : 'Sao chép',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: _copiedKey == 'amount' ? const Color(0xFF047857) : AppColors.primary,
                   ),
                 ),
               ),
@@ -548,16 +681,16 @@ class _VietQrPaymentSheetState extends State<VietQrPaymentSheet> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('⚠️', style: TextStyle(fontSize: 14)),
+              const Icon(Icons.warning_amber_rounded, size: 18, color: Color(0xFFB45309)),
               const SizedBox(width: 8),
               Expanded(
                 child: RichText(
                   text: TextSpan(
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF92400E), height: 1.4),
+                    style: const TextStyle(fontSize: 13, color: Color(0xFF92400E), height: 1.4),
                     children: [
                       const TextSpan(text: 'Quan trọng: Quý khách bắt buộc chuyển đúng số tiền và nội dung '),
                       TextSpan(text: info.memo, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFFB45309))),
-                      const TextSpan(text: ' ở trên để hệ thống tự động ghi nhận thanh toán trong 30 giây.'),
+                      const TextSpan(text: ' ở trên để hệ thống tự động ghi nhận thanh toán.'),
                     ],
                   ),
                 ),
@@ -617,7 +750,7 @@ class _VietQrPaymentSheetState extends State<VietQrPaymentSheet> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
+        Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondaryLight)),
         const SizedBox(width: 8),
         Flexible(
           child: Row(
@@ -636,7 +769,7 @@ class _VietQrPaymentSheetState extends State<VietQrPaymentSheet> {
                     style: TextStyle(
                       fontFamily: mono ? 'monospace' : null,
                       fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                      fontSize: 13,
                       color: const Color(0xFF92400E),
                     ),
                   ),
@@ -649,23 +782,20 @@ class _VietQrPaymentSheetState extends State<VietQrPaymentSheet> {
                     style: TextStyle(
                       fontFamily: mono ? 'monospace' : null,
                       fontWeight: bold ? FontWeight.bold : FontWeight.w600,
-                      fontSize: 12,
+                      fontSize: 13,
                       color: const Color(0xFF1E293B),
                     ),
                   ),
                 ),
               if (onCopy != null) ...[
                 const SizedBox(width: 6),
-                InkWell(
-                  onTap: onCopy,
-                  borderRadius: BorderRadius.circular(6),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      isCopied ? Icons.check_rounded : Icons.copy_rounded,
-                      size: 15,
-                      color: isCopied ? const Color(0xFF059669) : AppColors.primary,
-                    ),
+                IconButton(
+                  tooltip: 'Sao chép $label',
+                  onPressed: onCopy,
+                  icon: Icon(
+                    isCopied ? Icons.check_rounded : Icons.copy_rounded,
+                    size: 18,
+                    color: isCopied ? const Color(0xFF047857) : AppColors.primary,
                   ),
                 ),
               ],

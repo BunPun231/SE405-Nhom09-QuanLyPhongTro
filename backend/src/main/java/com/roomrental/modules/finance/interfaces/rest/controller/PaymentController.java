@@ -59,7 +59,9 @@ public class PaymentController {
     @GetMapping("/transactions")
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN', 'RESIDENT')")
     @Operation(summary = "Get transaction history (UC79)")
-    public ResponseEntity<Page<TransactionResult>> getTransactions(Pageable pageable) {
-        return ResponseEntity.ok(service.getTransactions(pageable));
+    public ResponseEntity<Page<TransactionResult>> getTransactions(
+            @RequestParam(required = false) Long invoiceId,
+            Pageable pageable) {
+        return ResponseEntity.ok(service.getTransactions(invoiceId, pageable));
     }
 }
