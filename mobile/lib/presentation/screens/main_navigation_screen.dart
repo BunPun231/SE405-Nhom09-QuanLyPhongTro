@@ -20,6 +20,7 @@ import 'manager/manager_profile_screen.dart';
 import 'manager/manager_motels_screen.dart';
 import 'manager/manager_reports_screen.dart';
 import 'manager/manager_audit_log_screen.dart';
+import 'manager/manager_maintenance_screen.dart';
 
 // Tenant Screens
 import 'tenant/tenant_home_screen.dart';
@@ -170,6 +171,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           case 'contracts': return const ManagerContractsScreen();
           case 'invoices': return const ManagerInvoicesScreen();
           case 'utility-reading': return const ManagerUtilityReadingScreen();
+          case 'maintenance': return const ManagerMaintenanceScreen();
           case 'services': return const ManagerServicesScreen();
           case 'broadcast': return const ManagerNotificationsScreen();
           case 'analytics': return const ManagerReportsScreen();
