@@ -113,7 +113,7 @@ class MobileBottomNav extends StatelessWidget {
         ];
       case UserRole.technician:
         return [
-          _NavItem('tasks', 'Công việc', Icons.assignment_rounded, badge: 3),
+          _NavItem('tasks', 'Công việc', Icons.assignment_rounded),
           _NavItem('equipment', 'Thiết bị', Icons.memory_rounded),
           _NavItem('profile', 'Tài khoản', Icons.person_rounded),
         ];
