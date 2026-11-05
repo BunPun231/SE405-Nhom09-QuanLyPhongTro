@@ -199,16 +199,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           case 'admin-dashboard': return const AdminDashboardScreen();
           case 'admin-users': return const AdminUsersScreen();
           case 'admin-subscriptions': return const AdminSubscriptionsScreen();
-          case 'dashboard': return ManagerDashboardScreen(onNavigate: _navigateTo);
-          case 'motels': return const ManagerMotelsScreen();
-          case 'rooms': return const ManagerRoomsScreen();
-          case 'tenants': return const ManagerTenantsScreen();
-          case 'contracts': return const ManagerContractsScreen();
-          case 'invoices': return const ManagerInvoicesScreen();
-          case 'utility-reading': return const ManagerUtilityReadingScreen();
-          case 'services': return const ManagerServicesScreen();
-          case 'broadcast': return const ManagerNotificationsScreen();
-          case 'analytics': return const ManagerReportsScreen();
           case 'audit-log': return const ManagerAuditLogScreen();
           case 'profile': return ManagerProfileScreen(onLogout: _handleLogout);
           default: return const AdminDashboardScreen();
