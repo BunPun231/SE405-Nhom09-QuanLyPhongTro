@@ -243,11 +243,14 @@ class _TechnicianEquipmentScreenState extends State<TechnicianEquipmentScreen> {
                 const Icon(Icons.chevron_right_rounded, color: AppColors.textSecondaryLight),
               ]),
               const SizedBox(height: 12),
-              Wrap(spacing: 8, runSpacing: 6, children: [
-                _stat('Tổng', d.totalQuantity, AppColors.primary),
-                _stat('Sẵn có', d.availableQuantity, AppColors.success),
-                _stat('Đang dùng', d.inUseQuantity, AppColors.info),
-                _stat('Đang sửa', d.repairingQuantity, AppColors.warning),
+              Row(children: [
+                Expanded(child: _stat('Tổng', d.totalQuantity, AppColors.primary)),
+                const SizedBox(width: 8),
+                Expanded(child: _stat('Sẵn có', d.availableQuantity, AppColors.success)),
+                const SizedBox(width: 8),
+                Expanded(child: _stat('Đang dùng', d.inUseQuantity, AppColors.info)),
+                const SizedBox(width: 8),
+                Expanded(child: _stat('Đang sửa', d.repairingQuantity, AppColors.warning)),
               ]),
             ],
           ),
@@ -258,9 +261,13 @@ class _TechnicianEquipmentScreenState extends State<TechnicianEquipmentScreen> {
 
   Widget _stat(String label, int value, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-      child: Text('$label: $value', style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(10)),
+      child: Column(children: [
+        Text('$value', style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 2),
+        Text(label, style: const TextStyle(color: AppColors.textSecondaryLight, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+      ]),
     );
   }
 }

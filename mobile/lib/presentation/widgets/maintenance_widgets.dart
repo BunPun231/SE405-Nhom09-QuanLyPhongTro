@@ -116,26 +116,32 @@ class MaintenanceTicketCard extends StatelessWidget {
                 style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight),
               ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 12,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              Row(
                 children: [
-                  Text('Ưu tiên: ${ticket.priorityLabel}',
-                      style: TextStyle(fontSize: 10, color: pColor, fontWeight: FontWeight.bold)),
-                  Text(maintenanceTimeAgo(ticket.createdAt), style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                  if (showReporter && (ticket.reporterName ?? '').isNotEmpty)
-                    Text('Người báo: ${ticket.reporterName}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                  if ((ticket.technicianName ?? '').isNotEmpty)
-                    Text('Thợ: ${ticket.technicianName}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                  if (ticket.beforeImages.isNotEmpty)
-                    Row(mainAxisSize: MainAxisSize.min, children: [
-                      const Icon(Icons.photo_library_outlined, size: 12, color: Colors.grey),
-                      const SizedBox(width: 3),
-                      Text('${ticket.beforeImages.length} ảnh', style: const TextStyle(fontSize: 10, color: Colors.grey)),
-                    ]),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: pColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                    child: Text(ticket.priorityLabel, style: TextStyle(fontSize: 10, color: pColor, fontWeight: FontWeight.bold)),
+                  ),
+                  if (ticket.beforeImages.isNotEmpty) ...[
+                    const SizedBox(width: 10),
+                    const Icon(Icons.photo_library_outlined, size: 13, color: AppColors.textSecondaryLight),
+                    const SizedBox(width: 3),
+                    Text('${ticket.beforeImages.length}', style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight)),
+                  ],
+                  const Spacer(),
+                  const Icon(Icons.schedule_rounded, size: 13, color: AppColors.textSecondaryLight),
+                  const SizedBox(width: 3),
+                  Text(maintenanceTimeAgo(ticket.createdAt), style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight)),
                 ],
               ),
+              if ((showReporter && (ticket.reporterName ?? '').isNotEmpty) || (ticket.technicianName ?? '').isNotEmpty) ...[
+                const SizedBox(height: 8),
+                if (showReporter && (ticket.reporterName ?? '').isNotEmpty)
+                  _metaLine(Icons.person_outline_rounded, 'Người báo: ${ticket.reporterName}'),
+                if ((ticket.technicianName ?? '').isNotEmpty)
+                  _metaLine(Icons.engineering_outlined, 'Thợ: ${ticket.technicianName}'),
+              ],
               if (actions.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Row(mainAxisAlignment: MainAxisAlignment.end, children: actions),
@@ -146,6 +152,17 @@ class MaintenanceTicketCard extends StatelessWidget {
       ),
     );
   }
+}
+
+Widget _metaLine(IconData icon, String text) {
+  return Padding(
+    padding: const EdgeInsets.only(top: 2),
+    child: Row(children: [
+      Icon(icon, size: 14, color: AppColors.textSecondaryLight),
+      const SizedBox(width: 6),
+      Expanded(child: Text(text, style: const TextStyle(fontSize: 11, color: AppColors.textSecondaryLight), overflow: TextOverflow.ellipsis)),
+    ]),
+  );
 }
 
 /// Bottom sheet chi tiết phiếu (UC83): mô tả, ảnh trước/sau, vật tư đã dùng.
