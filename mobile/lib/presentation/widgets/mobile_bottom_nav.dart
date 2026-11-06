@@ -120,8 +120,8 @@ class MobileBottomNav extends StatelessWidget {
       case UserRole.admin:
         return [
           _NavItem('admin-dashboard', 'Dashboard', Icons.dashboard_rounded),
-          _NavItem('admin-users', 'Tài khoản', Icons.people_alt_rounded),
-          _NavItem('admin-subscriptions', 'Gói cước', Icons.shield_rounded),
+          _NavItem('admin-users', 'Chủ trọ', Icons.people_alt_rounded),
+          _NavItem('audit-log', 'Nhật ký', Icons.history_rounded),
           _NavItem('profile', 'Cá nhân', Icons.person_rounded),
         ];
     }

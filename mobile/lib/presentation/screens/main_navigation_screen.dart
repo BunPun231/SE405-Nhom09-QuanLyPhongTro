@@ -40,7 +40,6 @@ import 'technician/technician_profile_screen.dart';
 // Admin Screens
 import 'admin/admin_dashboard_screen.dart';
 import 'admin/admin_users_screen.dart';
-import 'admin/admin_subscriptions_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   final UserRole initialRole;
@@ -204,7 +203,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         switch (_currentPage) {
           case 'admin-dashboard': return AdminDashboardScreen(onNavigate: _navigateTo);
           case 'admin-users': return const AdminUsersScreen();
-          case 'admin-subscriptions': return const AdminSubscriptionsScreen();
           case 'audit-log': return const ManagerAuditLogScreen();
           case 'profile': return ManagerProfileScreen(onLogout: _handleLogout);
           default: return AdminDashboardScreen(onNavigate: _navigateTo);

@@ -71,7 +71,6 @@ class MobileMenuDrawer extends StatelessWidget {
           _MenuSection('Quản trị SaaS', [
             _MenuItem('admin-dashboard', 'SaaS Overview', 'Thống kê toàn hệ thống', Icons.dashboard_rounded),
             _MenuItem('admin-users', 'Người dùng', 'Quản lý tài khoản chủ trọ', Icons.people_alt_rounded),
-            _MenuItem('admin-subscriptions', 'Gói cước', 'Quản lý subscription', Icons.shield_rounded),
             _MenuItem('audit-log', 'Nhật ký hệ thống', 'Lịch sử thao tác', Icons.history_rounded),
             _MenuItem('profile', 'Tài khoản', 'Hồ sơ cá nhân', Icons.person_rounded),
           ]),
