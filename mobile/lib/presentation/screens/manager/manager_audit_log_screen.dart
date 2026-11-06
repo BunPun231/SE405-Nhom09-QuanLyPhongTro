@@ -89,7 +89,10 @@ String _fmtTimestamp(String ts) {
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 class ManagerAuditLogScreen extends StatefulWidget {
-  const ManagerAuditLogScreen({Key? key}) : super(key: key);
+  /// true: nhật ký toàn hệ thống (Admin). false: nhật ký hoạt động của Manager.
+  final bool systemWide;
+
+  const ManagerAuditLogScreen({Key? key, this.systemWide = false}) : super(key: key);
 
   @override
   State<ManagerAuditLogScreen> createState() => _ManagerAuditLogScreenState();
@@ -119,7 +122,10 @@ class _ManagerAuditLogScreenState extends State<ManagerAuditLogScreen> {
   Future<void> _loadAuditLogs({int page = 0}) async {
     setState(() { _isLoading = true; _error = null; });
     try {
-      final res = await AuditService.listActivity(page: page, size: 20);
+      // Admin xem nhật ký toàn hệ thống (/audit-logs), Manager xem nhật ký hoạt động của mình (/activity-logs).
+      final res = widget.systemWide
+          ? await AuditService.list(page: page, size: 20)
+          : await AuditService.listActivity(page: page, size: 20);
       if (mounted) {
         setState(() {
           _logs = res.content;

@@ -216,6 +216,23 @@ class ApiClient {
     return _processResponse(response);
   }
 
+  /// POST multipart/form-data (upload ảnh). [files] gửi dưới field [fileField].
+  static Future<dynamic> postMultipart(
+    String endpoint, {
+    Map<String, String>? fields,
+    List<http.MultipartFile>? files,
+    Duration timeout = const Duration(seconds: 90),
+  }) async {
+    final request = http.MultipartRequest('POST', Uri.parse('$baseUrl$endpoint'));
+    // Content-Type (kèm boundary) do MultipartRequest tự đặt.
+    request.headers.addAll(_buildHeaders()..remove('Content-Type'));
+    if (fields != null) request.fields.addAll(fields);
+    if (files != null) request.files.addAll(files);
+    final streamed = await request.send().timeout(timeout);
+    final response = await http.Response.fromStream(streamed);
+    return _processResponse(response);
+  }
+
   static Future<dynamic> registerFaceVector({
     required String userId,
     required String name,

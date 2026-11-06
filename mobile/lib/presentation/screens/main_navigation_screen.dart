@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/models/app_models.dart';
 import '../../core/network/api_client.dart';
+import '../../core/session/user_session.dart';
 import '../widgets/mobile_header.dart';
 import '../widgets/mobile_bottom_nav.dart';
 import '../widgets/mobile_menu_drawer.dart';
@@ -20,6 +21,9 @@ import 'manager/manager_profile_screen.dart';
 import 'manager/manager_motels_screen.dart';
 import 'manager/manager_reports_screen.dart';
 import 'manager/manager_audit_log_screen.dart';
+import 'manager/manager_maintenance_screen.dart';
+import 'manager/manager_technicians_screen.dart';
+import 'manager/manager_devices_screen.dart';
 
 // Tenant Screens
 import 'tenant/tenant_home_screen.dart';
@@ -37,7 +41,6 @@ import 'technician/technician_profile_screen.dart';
 // Admin Screens
 import 'admin/admin_dashboard_screen.dart';
 import 'admin/admin_users_screen.dart';
-import 'admin/admin_subscriptions_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   final UserRole initialRole;
@@ -68,6 +71,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   void initState() {
     super.initState();
     _currentRole = widget.initialRole;
+    UserSession.displayName.value = widget.userName;
     _currentPage = _defaultPageForRole(widget.initialRole);
   }
 
@@ -170,6 +174,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           case 'contracts': return const ManagerContractsScreen();
           case 'invoices': return const ManagerInvoicesScreen();
           case 'utility-reading': return const ManagerUtilityReadingScreen();
+          case 'maintenance': return const ManagerMaintenanceScreen();
+          case 'technicians': return const ManagerTechniciansScreen();
+          case 'devices': return const ManagerDevicesScreen();
           case 'services': return const ManagerServicesScreen();
           case 'broadcast': return const ManagerNotificationsScreen();
           case 'analytics': return const ManagerReportsScreen();
@@ -191,27 +198,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         switch (_currentPage) {
           case 'tasks': return const TechnicianTasksScreen();
           case 'equipment': return const TechnicianEquipmentScreen();
-          case 'profile': return const TechnicianProfileScreen();
+          case 'profile': return TechnicianProfileScreen(onLogout: _handleLogout);
           default: return const TechnicianTasksScreen();
         }
       case UserRole.admin:
         switch (_currentPage) {
-          case 'admin-dashboard': return const AdminDashboardScreen();
+          case 'admin-dashboard': return AdminDashboardScreen(onNavigate: _navigateTo);
           case 'admin-users': return const AdminUsersScreen();
-          case 'admin-subscriptions': return const AdminSubscriptionsScreen();
-          case 'dashboard': return ManagerDashboardScreen(onNavigate: _navigateTo);
-          case 'motels': return const ManagerMotelsScreen();
-          case 'rooms': return const ManagerRoomsScreen();
-          case 'tenants': return const ManagerTenantsScreen();
-          case 'contracts': return const ManagerContractsScreen();
-          case 'invoices': return const ManagerInvoicesScreen();
-          case 'utility-reading': return const ManagerUtilityReadingScreen();
-          case 'services': return const ManagerServicesScreen();
-          case 'broadcast': return const ManagerNotificationsScreen();
-          case 'analytics': return const ManagerReportsScreen();
-          case 'audit-log': return const ManagerAuditLogScreen();
+          case 'audit-log': return const ManagerAuditLogScreen(systemWide: true);
           case 'profile': return ManagerProfileScreen(onLogout: _handleLogout);
-          default: return const AdminDashboardScreen();
+          default: return AdminDashboardScreen(onNavigate: _navigateTo);
         }
     }
   }
@@ -237,7 +233,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   padding: EdgeInsets.only(
                     bottom: 64 + MediaQuery.of(context).padding.bottom,
                   ),
-                  child: _buildBody(),
+                  // Chuyển trang mượt (fade) thay vì thay cứng gây nháy màn hình.
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    layoutBuilder: (current, previous) => Stack(
+                      fit: StackFit.expand,
+                      children: [...previous, if (current != null) current],
+                    ),
+                    transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+                    child: KeyedSubtree(
+                      key: ValueKey('${_currentRole.name}-$_currentPage'),
+                      child: _buildBody(),
+                    ),
+                  ),
                 ),
               ),
             ],

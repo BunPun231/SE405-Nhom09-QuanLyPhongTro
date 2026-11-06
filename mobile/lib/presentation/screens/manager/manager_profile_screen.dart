@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../widgets/account_widgets.dart';
 import '../../../core/services/auth_service.dart';
 
 class ManagerProfileScreen extends StatefulWidget {
@@ -164,8 +165,8 @@ class _ManagerProfileScreenState extends State<ManagerProfileScreen> {
                             setSheetState(() => errorMsg = 'Mật khẩu mới không khớp');
                             return;
                           }
-                          if (newPwdCtrl.text.length < 6) {
-                            setSheetState(() => errorMsg = 'Mật khẩu mới phải từ 6 ký tự');
+                          if (newPwdCtrl.text.length < 8) {
+                            setSheetState(() => errorMsg = 'Mật khẩu mới phải có ít nhất 8 ký tự');
                             return;
                           }
                           setSheetState(() { isLoading = true; errorMsg = null; });
@@ -346,8 +347,18 @@ class _ManagerProfileScreenState extends State<ManagerProfileScreen> {
 
             // Bảo mật
             _buildGroup(
-              title: 'Bảo mật',
+              title: 'Tài khoản & Bảo mật',
               children: [
+                _buildTile(
+                  icon: Icons.person_outline_rounded,
+                  color: const Color(0xFF10B981),
+                  title: 'Thông tin cá nhân',
+                  subtitle: 'Họ tên, số điện thoại, email',
+                  onTap: () async {
+                    await showProfileSheet(context);
+                    _loadUserInfo();
+                  },
+                ),
                 _buildTile(
                   icon: Icons.lock_outline_rounded,
                   color: AppColors.primary,
@@ -368,14 +379,9 @@ class _ManagerProfileScreenState extends State<ManagerProfileScreen> {
                   color: const Color(0xFF0EA5E9),
                   title: 'Cấu hình VietQR',
                   subtitle: 'Kết nối ngân hàng để tự đối soát',
-                  onTap: () {},
-                ),
-                _buildTile(
-                  icon: Icons.account_balance_wallet_rounded,
-                  color: AppColors.success,
-                  title: 'Ví & Cổng thanh toán',
-                  subtitle: 'MoMo, VNPay, ZaloPay',
-                  onTap: () {},
+                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Cấu hình ngân hàng nhận tiền được thiết lập trong mục Khu trọ trên web')),
+                  ),
                 ),
               ],
             ),

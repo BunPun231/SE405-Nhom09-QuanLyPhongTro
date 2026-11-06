@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'core/theme/app_scroll_behavior.dart';
 import 'core/theme/app_theme.dart';
 import 'presentation/screens/auth/app_router.dart';
 
@@ -16,6 +17,7 @@ class RoomRentalMobileApp extends StatelessWidget {
       title: 'Smart Room Rental Mobile',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
+      scrollBehavior: const AppScrollBehavior(),
       home: const AppRouter(),
     );
   }

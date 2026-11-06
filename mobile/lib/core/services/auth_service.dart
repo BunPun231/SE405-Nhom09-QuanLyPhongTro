@@ -124,6 +124,11 @@ class AuthService {
     await ApiClient.post('/api/v1/auth/forgot-password', body: {'identity': identity});
   }
 
+  /// UC06: Verify OTP — POST /api/v1/auth/verify-otp
+  static Future<void> verifyOtp({required String identity, required String otp}) async {
+    await ApiClient.post('/api/v1/auth/verify-otp', body: {'identity': identity, 'otp': otp});
+  }
+
   /// UC06: Reset password with OTP — POST /api/v1/auth/reset-password
   static Future<void> resetPassword({
     required String identity,
