@@ -85,7 +85,7 @@ class _ManagerTechniciansScreenState extends State<ManagerTechniciansScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('${t.fullName} sẽ không thể đăng nhập cho tới khi được mở khóa.', style: const TextStyle(fontSize: 13)),
+            Text('${t.fullName} sẽ không thể đăng nhập nữa. Hệ thống hiện chưa có chức năng mở khóa KTV nên thao tác này không thể hoàn tác trên ứng dụng.', style: const TextStyle(fontSize: 13)),
             const SizedBox(height: 12),
             TextField(
               controller: reasonCtrl,
