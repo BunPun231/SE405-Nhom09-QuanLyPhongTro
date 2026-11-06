@@ -229,7 +229,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   padding: EdgeInsets.only(
                     bottom: 64 + MediaQuery.of(context).padding.bottom,
                   ),
-                  child: _buildBody(),
+                  // Chuyển trang mượt (fade) thay vì thay cứng gây nháy màn hình.
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    layoutBuilder: (current, previous) => Stack(
+                      fit: StackFit.expand,
+                      children: [...previous, if (current != null) current],
+                    ),
+                    transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+                    child: KeyedSubtree(
+                      key: ValueKey('${_currentRole.name}-$_currentPage'),
+                      child: _buildBody(),
+                    ),
+                  ),
                 ),
               ),
             ],
