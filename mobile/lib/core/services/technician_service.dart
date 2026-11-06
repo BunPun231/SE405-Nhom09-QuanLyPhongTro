@@ -48,4 +48,32 @@ class TechnicianService {
     final data = await ApiClient.get('/api/technicians', params: {'page': page, 'size': size});
     return PageResponse.fromJson(data as Map<String, dynamic>, TechnicianResult.fromJson);
   }
+
+  /// UC56/61: Thêm KTV (tự cấp tài khoản, mật khẩu mặc định là SĐT) — POST /api/technicians
+  static Future<TechnicianResult> create({
+    required String phone,
+    required String fullName,
+    String? email,
+    List<String> expertise = const [],
+    List<int> assignedMotelIds = const [],
+  }) async {
+    final data = await ApiClient.post('/api/technicians', body: {
+      'phone': phone,
+      'fullName': fullName,
+      if (email != null && email.isNotEmpty) 'email': email,
+      'expertise': expertise,
+      'assignedMotelIds': assignedMotelIds,
+    });
+    return TechnicianResult.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// UC60: Khóa tài khoản KTV — POST /api/technicians/{id}/lock
+  static Future<void> lock(String techId, {String? reason}) async {
+    await ApiClient.post('/api/technicians/$techId/lock', body: {if (reason != null && reason.isNotEmpty) 'reason': reason});
+  }
+
+  /// UC62: Reset mật khẩu KTV về mặc định (SĐT) — POST /api/technicians/{id}/reset-password
+  static Future<void> resetPassword(String techId) async {
+    await ApiClient.post('/api/technicians/$techId/reset-password');
+  }
 }
