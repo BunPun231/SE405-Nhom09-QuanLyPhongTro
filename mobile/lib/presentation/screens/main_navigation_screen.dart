@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/models/app_models.dart';
 import '../../core/network/api_client.dart';
+import '../../core/session/user_session.dart';
 import '../widgets/mobile_header.dart';
 import '../widgets/mobile_bottom_nav.dart';
 import '../widgets/mobile_menu_drawer.dart';
@@ -69,6 +70,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   void initState() {
     super.initState();
     _currentRole = widget.initialRole;
+    UserSession.displayName.value = widget.userName;
     _currentPage = _defaultPageForRole(widget.initialRole);
   }
 
@@ -193,7 +195,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         switch (_currentPage) {
           case 'tasks': return const TechnicianTasksScreen();
           case 'equipment': return const TechnicianEquipmentScreen();
-          case 'profile': return const TechnicianProfileScreen();
+          case 'profile': return TechnicianProfileScreen(onLogout: _handleLogout);
           default: return const TechnicianTasksScreen();
         }
       case UserRole.admin:

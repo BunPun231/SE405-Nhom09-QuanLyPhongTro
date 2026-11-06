@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/models/app_models.dart';
 import '../../core/services/motel_service.dart';
+import '../../core/session/user_session.dart';
 
 class MobileHeader extends StatefulWidget {
   final UserRole currentRole;
@@ -35,6 +36,7 @@ class _MobileHeaderState extends State<MobileHeader> {
   @override
   void initState() {
     super.initState();
+    UserSession.displayName.addListener(_onNameChanged);
     _currentBuilding = widget.selectedBuilding;
     _loadBuildings();
   }
@@ -53,6 +55,12 @@ class _MobileHeaderState extends State<MobileHeader> {
     } catch (_) {}
   }
 
+  @override
+  void dispose() {
+    UserSession.displayName.removeListener(_onNameChanged);
+    super.dispose();
+  }
+
   String get _roleTitle {
     switch (widget.currentRole) {
       case UserRole.manager:
@@ -66,9 +74,16 @@ class _MobileHeaderState extends State<MobileHeader> {
     }
   }
 
+  /// Tên hiển thị: ưu tiên tên đã cập nhật ở màn Hồ sơ cá nhân.
+  String get _name => UserSession.displayName.value ?? widget.userName;
+
+  void _onNameChanged() {
+    if (mounted) setState(() {});
+  }
+
   String get _avatarLetter {
-    final parts = widget.userName.trim().split(' ');
-    return parts.isNotEmpty ? parts.last[0].toUpperCase() : 'U';
+    final parts = _name.trim().split(' ');
+    return parts.isNotEmpty && parts.last.isNotEmpty ? parts.last[0].toUpperCase() : 'U';
   }
 
   @override
@@ -140,7 +155,7 @@ class _MobileHeaderState extends State<MobileHeader> {
                         children: [
                           Text(_roleTitle, style: const TextStyle(fontSize: 10, color: AppColors.textSecondaryLight, fontWeight: FontWeight.w500)),
                           Text(
-                            widget.userName,
+                            _name,
                             style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimaryLight),
                             overflow: TextOverflow.ellipsis,
                           ),
