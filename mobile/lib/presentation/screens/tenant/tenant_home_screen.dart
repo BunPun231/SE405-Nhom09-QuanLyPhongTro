@@ -287,12 +287,14 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
                   // Quick Action Grid
                   const Text('Thao Tác Nhanh', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 12),
-                  Row(
+                  IntrinsicHeight(
+                    child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(
                         child: _QuickCard(
                           icon: Icons.bolt_rounded,
-                          title: 'Ghi Điện Nước',
+                          title: 'Điện Nước',
                           subtitle: 'Báo số tháng này',
                           color: Colors.blue,
                           onTap: () => widget.onNavigateTab(4),
@@ -319,6 +321,7 @@ class _TenantHomeScreenState extends State<TenantHomeScreen> {
                         ),
                       ),
                     ],
+                  ),
                   ),
                 ],
               ),

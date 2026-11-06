@@ -58,7 +58,7 @@ class _MobileHeaderState extends State<MobileHeader> {
       case UserRole.manager:
         return 'Chủ trọ / Quản lý';
       case UserRole.tenant:
-        return 'Phòng P205 - Khách thuê';
+        return 'Khách thuê';
       case UserRole.technician:
         return 'Kỹ thuật viên điện nước';
       case UserRole.admin:
