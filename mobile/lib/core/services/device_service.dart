@@ -92,6 +92,35 @@ class DeviceMovementLog {
   }
 }
 
+class DeviceUsage {
+  final int id;
+  final int deviceId;
+  final String deviceName;
+  final int roomId;
+  final int assignedQuantity;
+  final String? condition;
+
+  DeviceUsage({
+    required this.id,
+    required this.deviceId,
+    required this.deviceName,
+    required this.roomId,
+    required this.assignedQuantity,
+    this.condition,
+  });
+
+  factory DeviceUsage.fromJson(Map<String, dynamic> json) {
+    return DeviceUsage(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      deviceId: (json['deviceId'] as num?)?.toInt() ?? 0,
+      deviceName: json['deviceName']?.toString() ?? '',
+      roomId: (json['roomId'] as num?)?.toInt() ?? 0,
+      assignedQuantity: (json['assignedQuantity'] as num?)?.toInt() ?? 0,
+      condition: json['condition'],
+    );
+  }
+}
+
 // ─── DeviceService ──────────────────────────────────────────────────────────
 
 class DeviceService {
@@ -105,5 +134,105 @@ class DeviceService {
   static Future<List<DeviceMovementLog>> movementLogs(int motelId, int deviceId) async {
     final data = await ApiClient.get('/api/motels/$motelId/devices/$deviceId/movement-logs');
     return (data as List<dynamic>).map((e) => DeviceMovementLog.fromJson(e as Map<String, dynamic>)).toList();
+  }
+
+  static String _base(int motelId) => '/api/motels/$motelId/devices';
+
+  /// UC40: Thêm thiết bị mới — POST /api/motels/{motelId}/devices
+  static Future<DeviceResult> create(
+    int motelId, {
+    required String name,
+    String? brand,
+    double? purchasePrice,
+    String? purchaseDate, // yyyy-MM-dd
+    int totalQuantity = 1,
+  }) async {
+    final data = await ApiClient.post(_base(motelId), body: {
+      'name': name,
+      if (brand != null && brand.isNotEmpty) 'brand': brand,
+      if (purchasePrice != null) 'purchasePrice': purchasePrice,
+      if (purchaseDate != null) 'purchaseDate': purchaseDate,
+      'totalQuantity': totalQuantity,
+    });
+    return DeviceResult.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// UC44: Cập nhật thông tin — PATCH /api/motels/{motelId}/devices/{id}
+  static Future<DeviceResult> update(
+    int motelId,
+    int deviceId, {
+    String? name,
+    String? brand,
+    double? purchasePrice,
+    String? purchaseDate,
+  }) async {
+    final data = await ApiClient.patch('${_base(motelId)}/$deviceId', body: {
+      if (name != null) 'name': name,
+      if (brand != null) 'brand': brand,
+      if (purchasePrice != null) 'purchasePrice': purchasePrice,
+      if (purchaseDate != null) 'purchaseDate': purchaseDate,
+    });
+    return DeviceResult.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// UC45: Xóa thiết bị khỏi danh mục — DELETE /api/motels/{motelId}/devices/{id}
+  static Future<void> remove(int motelId, int deviceId) async {
+    await ApiClient.delete('${_base(motelId)}/$deviceId');
+  }
+
+  /// Nhập thêm vào kho — POST .../import
+  static Future<DeviceResult> importStock(int motelId, int deviceId, {required int quantity, String? note}) async {
+    final data = await ApiClient.post('${_base(motelId)}/$deviceId/import', body: {'quantity': quantity, if (note != null && note.isNotEmpty) 'note': note});
+    return DeviceResult.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// UC48: Thanh lý / hao hụt — POST .../dispose
+  static Future<DeviceResult> dispose(int motelId, int deviceId, {required int quantity, String? reason}) async {
+    final data = await ApiClient.post('${_base(motelId)}/$deviceId/dispose', body: {'quantity': quantity, if (reason != null && reason.isNotEmpty) 'reason': reason});
+    return DeviceResult.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// UC46: Gán thiết bị vào phòng — POST .../assign
+  static Future<void> assign(
+    int motelId,
+    int deviceId, {
+    required int roomId,
+    int quantity = 1,
+    String? condition,
+    String? note,
+  }) async {
+    await ApiClient.post('${_base(motelId)}/$deviceId/assign', body: {
+      'roomId': roomId,
+      'assignedQuantity': quantity,
+      if (condition != null && condition.isNotEmpty) 'condition': condition,
+      if (note != null && note.isNotEmpty) 'note': note,
+    });
+  }
+
+  /// UC47: Thu hồi thiết bị từ phòng — POST .../recall?roomId=
+  static Future<void> recall(int motelId, int deviceId, {required int roomId, int? quantity, String? note}) async {
+    await ApiClient.post(
+      '${_base(motelId)}/$deviceId/recall',
+      params: {'roomId': roomId},
+      body: {if (quantity != null) 'quantity': quantity, if (note != null && note.isNotEmpty) 'note': note},
+    );
+  }
+
+  /// Gửi sửa chữa — POST .../send-to-repair
+  static Future<DeviceResult> sendToRepair(int motelId, int deviceId, {required int quantity, String? note}) async {
+    final data = await ApiClient.post('${_base(motelId)}/$deviceId/send-to-repair', body: {'quantity': quantity, if (note != null && note.isNotEmpty) 'note': note});
+    return DeviceResult.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Sửa xong, nhập lại kho — POST .../finish-repair
+  static Future<DeviceResult> finishRepair(int motelId, int deviceId, {required int quantity, String? note}) async {
+    final data = await ApiClient.post('${_base(motelId)}/$deviceId/finish-repair', body: {'quantity': quantity, if (note != null && note.isNotEmpty) 'note': note});
+    return DeviceResult.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// UC43: Thiết bị theo phòng — GET /api/motels/{motelId}/rooms/{roomId}/devices
+  static Future<List<DeviceUsage>> byRoom(int motelId, int roomId) async {
+    final data = await ApiClient.get('/api/motels/$motelId/rooms/$roomId/devices');
+    return (data as List<dynamic>).map((e) => DeviceUsage.fromJson(e as Map<String, dynamic>)).toList();
   }
 }
