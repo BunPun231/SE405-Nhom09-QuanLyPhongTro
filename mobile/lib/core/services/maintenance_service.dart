@@ -132,8 +132,22 @@ class MaintenanceService {
   static MaintenanceTicketResult _ticket(dynamic data) =>
       MaintenanceTicketResult.fromJson(data as Map<String, dynamic>);
 
-  static PageResponse<MaintenanceTicketResult> _page(dynamic data) =>
-      PageResponse.fromJson(data as Map<String, dynamic>, MaintenanceTicketResult.fromJson);
+  /// Backend trả phiếu cũ trước; đảo lại để phiếu mới nhất luôn nằm trên cùng.
+  static PageResponse<MaintenanceTicketResult> _page(dynamic data) {
+    final page = PageResponse.fromJson(data as Map<String, dynamic>, MaintenanceTicketResult.fromJson);
+    final sorted = [...page.content]..sort((a, b) {
+        final ta = a.createdAt?.millisecondsSinceEpoch ?? 0;
+        final tb = b.createdAt?.millisecondsSinceEpoch ?? 0;
+        return tb != ta ? tb.compareTo(ta) : b.id.compareTo(a.id);
+      });
+    return PageResponse(
+      content: sorted,
+      totalElements: page.totalElements,
+      totalPages: page.totalPages,
+      size: page.size,
+      number: page.number,
+    );
+  }
 
   /// UC81: Tạo phiếu sự cố — POST /api/maintenance/tickets (multipart)
   static Future<MaintenanceTicketResult> createTicket({
