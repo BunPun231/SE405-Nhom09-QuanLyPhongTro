@@ -42,6 +42,8 @@ class _MobileHeaderState extends State<MobileHeader> {
   }
 
   Future<void> _loadBuildings() async {
+    // Danh sách khu trọ chỉ dành cho chủ trọ; các role khác sẽ bị backend từ chối (403).
+    if (widget.currentRole != UserRole.manager) return;
     try {
       final res = await MotelService.list();
       if (mounted) {
