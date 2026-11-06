@@ -1,90 +1,118 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
-import '../../../core/services/report_service.dart';
+import '../../../core/services/admin_service.dart';
+import 'admin_users_screen.dart';
 
+/// Tổng quan SaaS cho Admin: số lượng chủ trọ theo trạng thái và các chủ trọ đăng ký mới nhất.
 class AdminDashboardScreen extends StatefulWidget {
-  const AdminDashboardScreen({Key? key}) : super(key: key);
+  final void Function(String page)? onNavigate;
+
+  const AdminDashboardScreen({Key? key, this.onNavigate}) : super(key: key);
 
   @override
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  DashboardSummaryResult? _summary;
+  int _total = 0;
+  int _active = 0;
+  int _locked = 0;
+  List<ManagerResult> _recent = [];
   bool _isLoading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadAdminData();
+    _load();
   }
 
-  Future<void> _loadAdminData() async {
+  Future<void> _load() async {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      final data = await ReportService.getDashboardSummary();
-      if (mounted) {
-        setState(() {
-          _summary = data;
-          _isLoading = false;
-        });
-      }
+      // Đếm chính xác theo từng trạng thái (không suy ra từ vài bản ghi đầu).
+      final results = await Future.wait([
+        AdminService.getManagers(size: 5),
+        AdminService.getManagers(status: 'ACTIVE', size: 1),
+        AdminService.getManagers(status: 'LOCKED', size: 1),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _recent = results[0].content;
+        _total = results[0].totalElements;
+        _active = results[1].totalElements;
+        _locked = results[2].totalElements;
+        _error = null;
+        _isLoading = false;
+      });
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _isLoading = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: RefreshIndicator(
-        onRefresh: _loadAdminData,
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AppColors.cardDark,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Hệ Thống SaaS Smart Room Rental', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            _AdminStat(title: 'Tổng Số Phòng', value: '${_summary?.totalRooms ?? 0}'),
-                            _AdminStat(title: 'Đã Cho Thuê', value: '${_summary?.rentedRooms ?? 0}'),
-                            _AdminStat(title: 'Hợp Đồng Active', value: '${_summary?.activeContractsCount ?? 0}'),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text('Tổng quan doanh thu hệ thống', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 12),
-                  Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    child: ListTile(
-                      leading: const Icon(Icons.monetization_on_rounded, color: AppColors.success, size: 32),
-                      title: const Text('Doanh Thu Dự Kiến', style: TextStyle(fontSize: 13, color: AppColors.textSecondaryLight)),
-                      subtitle: Text(
-                        '${(_summary?.expectedRevenue ?? 0).toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.')}đ',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: AppColors.textPrimaryLight),
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? ListView(children: [
+                  const SizedBox(height: 120),
+                  Center(child: Text(_error!, style: const TextStyle(color: AppColors.danger))),
+                  Center(child: TextButton(onPressed: _load, child: const Text('Thử lại'))),
+                ])
+              : ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 90),
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(color: AppColors.cardDark, borderRadius: BorderRadius.circular(20)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Hệ Thống SaaS Smart Room Rental',
+                              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          const Text('Giám sát chủ trọ và quyền truy cập toàn hệ thống',
+                              style: TextStyle(color: Colors.white70, fontSize: 12)),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Expanded(child: _AdminStat(title: 'Tổng chủ trọ', value: '$_total')),
+                              Expanded(child: _AdminStat(title: 'Hoạt động', value: '$_active', color: const Color(0xFF34D399))),
+                              Expanded(child: _AdminStat(title: 'Bị khóa', value: '$_locked', color: const Color(0xFFF87171))),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
-              ),
-      ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text('Chủ trọ đăng ký mới nhất', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        ),
+                        if (widget.onNavigate != null)
+                          TextButton(onPressed: () => widget.onNavigate!('admin-users'), child: const Text('Xem tất cả')),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (_recent.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 40),
+                        child: Center(child: Text('Chưa có chủ trọ nào đăng ký', style: TextStyle(color: AppColors.textSecondaryLight))),
+                      )
+                    else
+                      ..._recent.map((m) => ManagerCard(manager: m)),
+                  ],
+                ),
     );
   }
 }
@@ -92,13 +120,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 class _AdminStat extends StatelessWidget {
   final String title;
   final String value;
-  const _AdminStat({required this.title, required this.value});
+  final Color color;
+
+  const _AdminStat({required this.title, required this.value, this.color = Colors.white});
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+        Text(value, style: TextStyle(color: color, fontSize: 24, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 2),
         Text(title, style: const TextStyle(color: Colors.white70, fontSize: 11)),
       ],
     );

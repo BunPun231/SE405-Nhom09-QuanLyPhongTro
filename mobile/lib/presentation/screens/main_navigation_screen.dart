@@ -202,12 +202,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         }
       case UserRole.admin:
         switch (_currentPage) {
-          case 'admin-dashboard': return const AdminDashboardScreen();
+          case 'admin-dashboard': return AdminDashboardScreen(onNavigate: _navigateTo);
           case 'admin-users': return const AdminUsersScreen();
           case 'admin-subscriptions': return const AdminSubscriptionsScreen();
           case 'audit-log': return const ManagerAuditLogScreen();
           case 'profile': return ManagerProfileScreen(onLogout: _handleLogout);
-          default: return const AdminDashboardScreen();
+          default: return AdminDashboardScreen(onNavigate: _navigateTo);
         }
     }
   }
