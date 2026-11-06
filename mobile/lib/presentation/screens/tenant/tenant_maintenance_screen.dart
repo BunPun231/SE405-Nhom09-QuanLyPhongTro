@@ -141,6 +141,7 @@ class _TenantMaintenanceScreenState extends State<TenantMaintenanceScreen> {
     var priority = 'MEDIUM';
     var photos = <XFile>[];
     var submitting = false;
+    String? error;
 
     showModalBottomSheet(
       context: context,
@@ -158,6 +159,7 @@ class _TenantMaintenanceScreenState extends State<TenantMaintenanceScreen> {
                 const SizedBox(height: 4),
                 Text('Phòng #${_contract!.roomId}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
                 const SizedBox(height: 12),
+                MaintenanceErrorBanner(error),
                 DropdownButtonFormField<String>(
                   value: category,
                   decoration: maintenanceInputDecoration('Loại sự cố'),
@@ -191,10 +193,13 @@ class _TenantMaintenanceScreenState extends State<TenantMaintenanceScreen> {
                       ? null
                       : () async {
                           if (descController.text.trim().isEmpty) {
-                            _toast('Vui lòng nhập mô tả sự cố');
+                            setSheet(() => error = 'Vui lòng nhập mô tả sự cố');
                             return;
                           }
-                          setSheet(() => submitting = true);
+                          setSheet(() {
+                            submitting = true;
+                            error = null;
+                          });
                           try {
                             await MaintenanceService.createTicket(
                               roomId: _contract!.roomId,
@@ -207,8 +212,10 @@ class _TenantMaintenanceScreenState extends State<TenantMaintenanceScreen> {
                             _toast('Đã gửi báo cáo sự cố tới Quản lý');
                             _load();
                           } catch (e) {
-                            setSheet(() => submitting = false);
-                            _toast(e.toString().replaceFirst('Exception: ', ''));
+                            setSheet(() {
+                              submitting = false;
+                              error = e.toString().replaceFirst('Exception: ', '');
+                            });
                           }
                         },
                   style: ElevatedButton.styleFrom(

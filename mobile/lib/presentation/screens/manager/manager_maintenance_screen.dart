@@ -125,6 +125,7 @@ class _ManagerMaintenanceScreenState extends State<ManagerMaintenanceScreen> {
     }
     String? selected = t.assignedTo != null && techs.any((k) => k.userId == t.assignedTo) ? t.assignedTo : techs.first.userId;
     var submitting = false;
+    String? error;
 
     showModalBottomSheet(
       context: context,
@@ -144,6 +145,7 @@ class _ManagerMaintenanceScreenState extends State<ManagerMaintenanceScreen> {
                 Text('Phòng ${t.roomNumber} - ${t.categoryLabel}',
                     style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
                 const SizedBox(height: 12),
+                MaintenanceErrorBanner(error),
                 Flexible(
                   child: ListView(
                     shrinkWrap: true,
@@ -172,15 +174,20 @@ class _ManagerMaintenanceScreenState extends State<ManagerMaintenanceScreen> {
                   onPressed: submitting || selected == null
                       ? null
                       : () async {
-                          setSheet(() => submitting = true);
+                          setSheet(() {
+                            submitting = true;
+                            error = null;
+                          });
                           try {
                             await MaintenanceService.assign(t.id, selected!);
                             if (sheetContext.mounted) Navigator.pop(sheetContext);
                             _toast('Đã giao việc cho kỹ thuật viên');
                             _loadTickets();
                           } catch (e) {
-                            setSheet(() => submitting = false);
-                            _toast(e.toString().replaceFirst('Exception: ', ''));
+                            setSheet(() {
+                              submitting = false;
+                              error = e.toString().replaceFirst('Exception: ', '');
+                            });
                           }
                         },
                   style: ElevatedButton.styleFrom(

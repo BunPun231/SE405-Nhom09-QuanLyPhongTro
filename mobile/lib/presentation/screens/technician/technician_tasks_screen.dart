@@ -76,6 +76,7 @@ class _TechnicianTasksScreenState extends State<TechnicianTasksScreen> {
     var quantity = 1;
     var photos = <XFile>[];
     var submitting = false;
+    String? error;
 
     showModalBottomSheet(
       context: context,
@@ -99,6 +100,7 @@ class _TechnicianTasksScreenState extends State<TechnicianTasksScreen> {
                 Text('Phòng ${t.roomNumber} - ${t.categoryLabel}',
                     style: const TextStyle(fontSize: 12, color: AppColors.textSecondaryLight)),
                 const SizedBox(height: 12),
+                MaintenanceErrorBanner(error),
                 TextField(
                   controller: noteController,
                   maxLines: 3,
@@ -148,7 +150,10 @@ class _TechnicianTasksScreenState extends State<TechnicianTasksScreen> {
                   onPressed: submitting
                       ? null
                       : () async {
-                          setSheet(() => submitting = true);
+                          setSheet(() {
+                            submitting = true;
+                            error = null;
+                          });
                           try {
                             await MaintenanceService.complete(
                               t.id,
@@ -161,8 +166,10 @@ class _TechnicianTasksScreenState extends State<TechnicianTasksScreen> {
                             _toast('Đã hoàn thành công việc');
                             _load();
                           } catch (e) {
-                            setSheet(() => submitting = false);
-                            _toast(e.toString().replaceFirst('Exception: ', ''));
+                            setSheet(() {
+                              submitting = false;
+                              error = e.toString().replaceFirst('Exception: ', '');
+                            });
                           }
                         },
                   style: ElevatedButton.styleFrom(

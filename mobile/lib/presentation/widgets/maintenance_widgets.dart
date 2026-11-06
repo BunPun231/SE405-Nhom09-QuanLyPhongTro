@@ -408,3 +408,21 @@ InputDecoration maintenanceInputDecoration(String label) {
     enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
   );
 }
+
+/// Banner lỗi hiển thị ngay trong bottom sheet (SnackBar bị sheet che nên người dùng không thấy).
+class MaintenanceErrorBanner extends StatelessWidget {
+  final String? message;
+  const MaintenanceErrorBanner(this.message, {Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    if (message == null) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: AppColors.danger.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+      child: Text(message!, style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+    );
+  }
+}
