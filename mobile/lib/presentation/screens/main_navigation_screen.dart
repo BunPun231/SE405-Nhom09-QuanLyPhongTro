@@ -205,7 +205,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         switch (_currentPage) {
           case 'admin-dashboard': return AdminDashboardScreen(onNavigate: _navigateTo);
           case 'admin-users': return const AdminUsersScreen();
-          case 'audit-log': return const ManagerAuditLogScreen();
+          case 'audit-log': return const ManagerAuditLogScreen(systemWide: true);
           case 'profile': return ManagerProfileScreen(onLogout: _handleLogout);
           default: return AdminDashboardScreen(onNavigate: _navigateTo);
         }
