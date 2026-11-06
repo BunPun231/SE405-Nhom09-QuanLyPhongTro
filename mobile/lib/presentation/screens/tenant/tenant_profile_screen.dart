@@ -4,6 +4,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/services/contract_service.dart';
 import '../../../core/network/api_client.dart';
+import '../../widgets/account_widgets.dart';
 import 'face_register_screen.dart';
 
 class TenantProfileScreen extends StatefulWidget {
@@ -94,7 +95,7 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF1E293B))),
                 const SizedBox(height: 4),
-                const Text('Mật khẩu mới tối thiểu 6 ký tự',
+                const Text('Mật khẩu mới tối thiểu 8 ký tự',
                     style: TextStyle(
                         fontSize: 12, color: AppColors.textSecondaryLight)),
                 const SizedBox(height: 16),
@@ -182,9 +183,9 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
                                   errorMsg = 'Vui lòng nhập đầy đủ thông tin');
                               return;
                             }
-                            if (newP.length < 6) {
+                            if (newP.length < 8) {
                               setModalState(() =>
-                                  errorMsg = 'Mật khẩu mới phải từ 6 ký tự');
+                                  errorMsg = 'Mật khẩu mới phải có ít nhất 8 ký tự');
                               return;
                             }
                             if (newP != conf) {
@@ -351,6 +352,17 @@ class _TenantProfileScreenState extends State<TenantProfileScreen> {
           ),
           child: Column(
             children: [
+              _buildTile(
+                icon: Icons.person_outline_rounded,
+                color: const Color(0xFF10B981),
+                title: 'Thông tin cá nhân',
+                subtitle: 'Họ tên, số điện thoại, email',
+                onTap: () async {
+                  await showProfileSheet(context);
+                  _loadProfile();
+                },
+              ),
+              const Divider(height: 1, indent: 60),
               _buildTile(
                 icon: Icons.lock_reset_rounded,
                 color: const Color(0xFF3B82F6),
