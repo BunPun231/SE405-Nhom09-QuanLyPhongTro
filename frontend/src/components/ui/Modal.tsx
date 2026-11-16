@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
 
@@ -21,10 +22,10 @@ export function Modal({ isOpen, onClose, title, children, className, size = "md"
     xl: "max-w-4xl"
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-0">
+  return createPortal(
+    <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center p-4 sm:p-0">
       <div 
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity" 
+        className="fixed inset-0 !mt-0 !top-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" 
         onClick={onClose}
       />
       <div className={cn(
@@ -48,6 +49,7 @@ export function Modal({ isOpen, onClose, title, children, className, size = "md"
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

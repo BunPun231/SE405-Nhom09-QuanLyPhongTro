@@ -13,6 +13,8 @@ import { serviceService, type ServiceResult } from "@/services/serviceService";
 import { contractService } from "@/services/contractService";
 import { extractError } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const STATUS_BADGE: Record<string, React.ReactNode> = {
   PENDING: <Badge variant="warning">Chờ duyệt</Badge>,
@@ -529,6 +531,8 @@ function TinderReviewModal({
 }
 
 export function MeterReadingPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const { user } = useAuthStore();
   const navigate = useNavigate();
   const { refreshStatus, advanceTenantStep } = useTourGuide();
@@ -722,15 +726,21 @@ export function MeterReadingPage() {
 
   const handleBulkApprove = async () => {
     if (pendingReadings.length === 0) return;
-    if (!confirm(`Bạn có chắc chắn muốn duyệt tất cả ${pendingReadings.length} chỉ số đang chờ duyệt?`)) return;
+    const ok = await confirm({
+      title: "Duyệt tất cả chỉ số",
+      message: `Bạn có chắc chắn muốn duyệt tất cả ${pendingReadings.length} chỉ số đang chờ duyệt?`,
+      confirmText: "Duyệt tất cả",
+      variant: "primary",
+    });
+    if (!ok) return;
     setBulkLoading(true);
     try {
       const ids = pendingReadings.map(d => d.currentReading.id);
       await meterReadingService.bulkApprove(ids);
       fetchData();
-      alert("Đã duyệt tất cả chỉ số thành công!");
+      toast.success("Đã duyệt tất cả chỉ số thành công!");
     } catch (err) {
-      alert(extractError(err));
+      toast.error(extractError(err));
     } finally {
       setBulkLoading(false);
     }
@@ -741,7 +751,7 @@ export function MeterReadingPage() {
       await meterReadingService.approve(readingId);
       fetchData();
     } catch (err) {
-      alert(extractError(err));
+      toast.error(extractError(err));
     }
   };
 
@@ -752,7 +762,7 @@ export function MeterReadingPage() {
       await meterReadingService.reject(readingId, reason);
       fetchData();
     } catch (err) {
-      alert(extractError(err));
+      toast.error(extractError(err));
     }
   };
 
@@ -760,7 +770,7 @@ export function MeterReadingPage() {
     try {
       await meterReadingService.approve(readingId);
     } catch (err) {
-      alert(extractError(err));
+      toast.error(extractError(err));
       throw err;
     }
   };
@@ -771,7 +781,7 @@ export function MeterReadingPage() {
     try {
       await meterReadingService.reject(readingId, reason);
     } catch (err) {
-      alert(extractError(err));
+      toast.error(extractError(err));
       throw err;
     }
   };

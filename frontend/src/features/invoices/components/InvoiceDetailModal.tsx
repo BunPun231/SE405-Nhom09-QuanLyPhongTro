@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/Badge";
 import { formatCurrency } from "@/lib/utils";
 import { Printer, Send, CreditCard } from "lucide-react";
 import type { InvoiceResult } from "@/services/invoiceService";
+import { useToast } from "@/components/ui/Toast";
 
 interface InvoiceDetailModalProps {
   isOpen: boolean;
@@ -71,6 +72,7 @@ function calculateItemCost(item: any): number {
 }
 
 export function InvoiceDetailModal({ isOpen, onClose, invoice, onCollectPayment, isManager = true }: InvoiceDetailModalProps) {
+  const toast = useToast();
   if (!invoice) return null;
 
   let snapshot: any = null;
@@ -186,7 +188,7 @@ export function InvoiceDetailModal({ isOpen, onClose, invoice, onCollectPayment,
   };
 
   const handleShare = () => {
-    alert(`Chia sẻ thông tin hóa đơn #${invoice.id} qua Zalo/Email cho khách thuê.`);
+    toast.info(`Chia sẻ thông tin hóa đơn #${invoice.id} qua Zalo/Email cho khách thuê.`);
   };
 
   return (

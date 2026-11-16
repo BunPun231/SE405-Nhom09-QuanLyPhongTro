@@ -642,7 +642,7 @@ export function AddMotelModal({ isOpen, onClose, onSuccess, motel }: AddMotelMod
 
       {/* Fullscreen guide slide zoom popup */}
       {isFullscreenOpen && (
-        <div className="fixed inset-0 z-[100000] bg-black/95 flex flex-col items-center justify-between p-6 animate-fade-in font-sans">
+        <div className="fixed inset-0 !mt-0 !top-0 z-[100000] bg-black/95 flex flex-col items-center justify-between p-6 animate-fade-in font-sans">
           {/* Top header */}
           <div className="w-full max-w-5xl flex justify-between items-center text-white pb-4 border-b border-white/10">
             <div>

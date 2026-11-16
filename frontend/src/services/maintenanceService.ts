@@ -30,7 +30,7 @@ export interface MaintenanceTicketResponse {
   category: string;
   description: string;
   beforeImages: string[];
-  status: "OPEN" | "PROCESSING" | "COMPLETED" | "ESCALATED" | "CANCELLED";
+  status: "OPEN" | "ASSIGNED" | "PROCESSING" | "COMPLETED" | "ESCALATED" | "CANCELLED";
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   details: MaintenanceDetailResponse[];
   createdAt: string;
@@ -70,8 +70,10 @@ export const maintenanceService = {
   },
 
   /** Cancel maintenance ticket */
-  async cancelTicket(ticketId: number): Promise<MaintenanceTicketResponse> {
-    const res = await api.post<{ data: MaintenanceTicketResponse }>(`/api/maintenance/tickets/${ticketId}/cancel`);
+  async cancelTicket(ticketId: number, cancelReason?: string): Promise<MaintenanceTicketResponse> {
+    const res = await api.post<{ data: MaintenanceTicketResponse }>(`/api/maintenance/tickets/${ticketId}/cancel`, {
+      cancelReason: cancelReason || null,
+    });
     return res.data.data;
   },
 

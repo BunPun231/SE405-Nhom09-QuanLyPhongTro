@@ -72,6 +72,7 @@ export function DashboardPage() {
   const { user } = useAuthStore();
   const { hasCompletedOnboarding, setIsGuideOpen } = useTourGuide();
   const isTenant = (user?.role as string) === "TENANT" || (user?.role as string) === "RESIDENT";
+  const isTechnician = (user?.role as string) === "TECHNICIAN";
 
   // Manager state
   const [data, setData] = useState<DashboardSummaryResult | null>(null);
@@ -101,7 +102,7 @@ export function DashboardPage() {
         setTenantInvoices(res.content || []);
         setCreditBalance(bal);
       } else {
-        if (!hasCompletedOnboarding) {
+        if (!hasCompletedOnboarding && !isTechnician) {
           // Set rich dummy summary data
           setData({
             expectedRevenue: 15200000,

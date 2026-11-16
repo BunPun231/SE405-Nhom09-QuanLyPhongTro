@@ -265,7 +265,7 @@ export function ManagerListPage() {
 
       {/* Lock / Unlock Confirmation Modal */}
       {lockModalOpen && selectedManager && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
           <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl p-6 shadow-2xl space-y-5">
             <div className="flex items-center gap-3">
               <div className={`p-3 rounded-xl ${selectedManager.status === "LOCKED" ? "bg-emerald-50 text-emerald-600 border border-emerald-200" : "bg-red-50 text-red-600 border border-red-200"}`}>

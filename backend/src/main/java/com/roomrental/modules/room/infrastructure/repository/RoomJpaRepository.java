@@ -1,5 +1,6 @@
 package com.roomrental.modules.room.infrastructure.repository;
 
+import com.roomrental.modules.room.domain.model.RoomStatus;
 import com.roomrental.modules.room.infrastructure.entity.RoomEntity;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,6 +15,8 @@ public interface RoomJpaRepository extends JpaRepository<RoomEntity, Long> {
     Optional<RoomEntity> findByIdAndMotelId(Long id, Long motelId);
 
     Page<RoomEntity> findByMotelId(Long motelId, Pageable pageable);
+
+    Page<RoomEntity> findByMotelIdAndStatus(Long motelId, RoomStatus status, Pageable pageable);
 
     boolean existsByMotelIdAndRoomNumber(Long motelId, String roomNumber);
 

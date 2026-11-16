@@ -104,6 +104,14 @@ public class DeviceController {
         return ResponseEntity.ok(ApiResponse.ok(deviceService.getDevicesByRoom(motelId, roomId)));
     }
 
+    @GetMapping("/devices/{deviceId}/usages")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN','TECHNICIAN')")
+    @Operation(summary = "Get rooms where a device is currently assigned with quantities")
+    public ResponseEntity<ApiResponse<List<DeviceUsageResult>>> getUsagesByDevice(
+            @PathVariable Long motelId, @PathVariable Long deviceId) {
+        return ResponseEntity.ok(ApiResponse.ok(deviceService.getUsagesByDevice(motelId, deviceId)));
+    }
+
     @PostMapping("/devices/{deviceId}/assign")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
     @Operation(summary = "Assign device to room (UC46)")

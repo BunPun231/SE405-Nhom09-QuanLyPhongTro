@@ -9,6 +9,8 @@ import { Modal } from "@/components/ui/Modal";
 import { invoiceService } from "@/services/invoiceService";
 import { formatCurrency } from "@/lib/utils";
 import { useTourGuide } from "@/hooks/useTourGuide";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 
 function AddResidentModal({
@@ -248,6 +250,8 @@ function AddResidentModal({
 }
 
 export function ResidentListPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const { activeSubStepId } = useTourGuide();
   const [residents, setResidents] = useState<ResidentResult[]>([]);
   const [loading, setLoading] = useState(true);
@@ -603,13 +607,19 @@ export function ResidentListPage() {
                 variant="danger"
                 size="sm"
                 onClick={async () => {
-                  if (confirm("Xác nhận vô hiệu hóa khách thuê này?")) {
+                  const ok = await confirm({
+                    title: "Vô hiệu hóa khách thuê",
+                    message: "Xác nhận vô hiệu hóa khách thuê này?",
+                    confirmText: "Vô hiệu hóa",
+                    variant: "danger",
+                  });
+                  if (ok) {
                     try {
                       await residentService.deactivate(selectedResident.userId);
                       setSelectedResident(null);
                       fetchResidents();
                     } catch (err) {
-                      alert(extractError(err));
+                      toast.error(extractError(err));
                     }
                   }
                 }}

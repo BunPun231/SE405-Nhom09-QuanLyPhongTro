@@ -8,6 +8,8 @@ import { motelService, type MotelResult } from "@/services/motelService";
 import { extractError } from "@/lib/api";
 import { AssignServiceModal } from "../components/AssignServiceModal";
 import { useTourGuide } from "@/hooks/useTourGuide";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 
 
@@ -368,6 +370,8 @@ function ServiceFormModal({
 
 // ============ MAIN PAGE ============
 export function ServiceListPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const { refreshStatus } = useTourGuide();
   const [motels, setMotels] = useState<MotelResult[]>([]);
   const [selectedMotelId, setSelectedMotelId] = useState<number | null>(null);
@@ -404,12 +408,18 @@ export function ServiceListPage() {
   }, [fetchServices]);
 
   const handleDelete = async (svc: ServiceResult) => {
-    if (!confirm(`Xóa dịch vụ "${svc.name}"?`)) return;
+    const ok = await confirm({
+      title: "Xóa dịch vụ",
+      message: `Xóa dịch vụ "${svc.name}"?`,
+      confirmText: "Xóa dịch vụ",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       await serviceService.delete(selectedMotelId!, svc.id);
       fetchServices();
     } catch (err) {
-      alert(extractError(err));
+      toast.error(extractError(err));
     }
   };
 

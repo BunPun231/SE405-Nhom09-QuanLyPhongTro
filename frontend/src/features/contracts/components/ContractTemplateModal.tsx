@@ -5,6 +5,8 @@ import { motelService, roomService, type MotelResult, type RoomResult } from "@/
 import { residentService, type ResidentResult } from "@/services/residentService";
 import type { ContractResult } from "@/services/contractService";
 import { extractError } from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 interface ContractTemplateModalProps {
   isOpen: boolean;
@@ -49,6 +51,8 @@ Hai bên đồng ý ký kết hợp đồng thuê phòng trọ với các điề
 `;
 
 export function ContractTemplateModal({ isOpen, onClose, contract }: ContractTemplateModalProps) {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [templateText, setTemplateText] = useState("");
   const [motel, setMotel] = useState<MotelResult | null>(null);
   const [room, setRoom] = useState<RoomResult | null>(null);
@@ -111,11 +115,17 @@ export function ContractTemplateModal({ isOpen, onClose, contract }: ContractTem
 
   const handleSaveTemplate = () => {
     localStorage.setItem("contract_print_template", templateText);
-    alert("Đã lưu mẫu thiết kế hợp đồng!");
+    toast.success("Đã lưu mẫu thiết kế hợp đồng!");
   };
 
-  const handleResetTemplate = () => {
-    if (confirm("Bạn có chắc chắn muốn đặt lại mẫu mặc định?")) {
+  const handleResetTemplate = async () => {
+    const ok = await confirm({
+      title: "Đặt lại mẫu thiết kế",
+      message: "Bạn có chắc chắn muốn đặt lại mẫu mặc định?",
+      confirmText: "Đặt lại",
+      variant: "warning",
+    });
+    if (ok) {
       setTemplateText(DEFAULT_TEMPLATE);
       localStorage.removeItem("contract_print_template");
     }

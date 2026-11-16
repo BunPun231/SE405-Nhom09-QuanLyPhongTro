@@ -80,9 +80,10 @@ public class MaintenanceController {
     }
     @PostMapping("/tickets/{ticketId}/cancel")
     @PreAuthorize("hasAnyRole('RESIDENT','MANAGER','ADMIN')")
-    @Operation(summary = "Cancel maintenance ticket")
-    public ResponseEntity<ApiResponse<MaintenanceTicketResult>> cancelTicket(@PathVariable Long ticketId) {
-        MaintenanceTicketResult result = maintenanceService.cancelTicket(ticketId);
+    @Operation(summary = "Cancel maintenance ticket with reason")
+    public ResponseEntity<ApiResponse<MaintenanceTicketResult>> cancelTicket(
+            @PathVariable Long ticketId, @RequestBody(required = false) CancelTicketRequest body) {
+        MaintenanceTicketResult result = maintenanceService.cancelTicket(ticketId, body != null ? body.cancelReason() : null);
         return ResponseEntity.ok(ApiResponse.ok(result, "Ticket cancelled successfully"));
     }
 

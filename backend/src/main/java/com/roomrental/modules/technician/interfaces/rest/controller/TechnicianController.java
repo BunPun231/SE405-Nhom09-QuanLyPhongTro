@@ -65,6 +65,13 @@ public class TechnicianController {
         technicianService.lock(techId, body != null ? body.reason() : null);
         return ResponseEntity.ok(ApiResponse.ok("Technician locked"));
     }
+    @PostMapping("/{techId}/unlock")
+    @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")
+    @Operation(summary = "Unlock technician account")
+    public ResponseEntity<ApiResponse<Void>> unlock(@PathVariable UUID techId) {
+        technicianService.unlock(techId);
+        return ResponseEntity.ok(ApiResponse.ok("Technician unlocked"));
+    }
 
     @PostMapping("/{techId}/reset-password")
     @PreAuthorize("hasAnyRole('MANAGER','ADMIN')")

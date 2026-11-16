@@ -134,8 +134,11 @@ public class MaintenanceService {
         }
 
         if (command.technicianId() != null) {
-            userRepository.findById(command.technicianId())
+            UserEntity tech = userRepository.findById(command.technicianId())
                     .orElseThrow(() -> BaseException.notFound("Technician", command.technicianId()));
+            if ("LOCKED".equalsIgnoreCase(tech.getStatus())) {
+                throw BaseException.badRequest("Không thể phân công cho KTV đang bị khóa tài khoản");
+            }
         }
 
         ticket.setAssignedTo(command.technicianId());
@@ -253,16 +256,17 @@ public class MaintenanceService {
         return toResult(saved);
     }
     @Transactional
-    public MaintenanceTicketResult cancelTicket(Long ticketId) {
+    public MaintenanceTicketResult cancelTicket(Long ticketId, String cancelReason) {
         MaintenanceTicketEntity ticket = ticketRepository.findById(ticketId)
                 .orElseThrow(() -> BaseException.notFound("MaintenanceTicket", ticketId));
 
         String status = ticket.getStatus();
         if (!"OPEN".equalsIgnoreCase(status) && !"ASSIGNED".equalsIgnoreCase(status) && !"PROCESSING".equalsIgnoreCase(status)) {
-            throw BaseException.badRequest("Chỉ cho phép hủy khi phiếu đang ở trạng thái OPEN hoặc ASSIGNED");
+            throw BaseException.badRequest("Chỉ cho phép hủy khi phiếu đang ở trạng thái OPEN, ASSIGNED hoặc PROCESSING");
         }
 
         ticket.setStatus(MaintenanceStatus.CANCELLED.name());
+        ticket.setCancelReason(cancelReason);
         ticket.setUpdatedAt(OffsetDateTime.now());
         MaintenanceTicketEntity saved = ticketRepository.save(ticket);
         return toResult(saved);

@@ -72,8 +72,9 @@ public class RoomController {
     @Operation(summary = "List rooms (UC27)")
     public ResponseEntity<ApiResponse<PageResponse<RoomResult>>> list(
             @PathVariable Long motelId,
-            @PageableDefault(size = 20) Pageable pageable) {
-        return ResponseEntity.ok(ApiResponse.ok(roomService.list(motelId, pageable)));
+            @RequestParam(required = false) com.roomrental.modules.room.domain.model.RoomStatus status,
+            @PageableDefault(size = 100) Pageable pageable) {
+        return ResponseEntity.ok(ApiResponse.ok(roomService.list(motelId, status, pageable)));
     }
 
     @GetMapping("/{roomId}")
