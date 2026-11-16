@@ -47,6 +47,10 @@ export const technicianService = {
   async lockTechnician(techId: string, reason?: string): Promise<void> {
     await api.post(`/api/technicians/${techId}/lock`, { reason });
   },
+  /** Unlock technician */
+  async unlockTechnician(techId: string): Promise<void> {
+    await api.post(`/api/technicians/${techId}/unlock`);
+  },
 
   /** UC62 - Reset technician password */
   async resetPassword(techId: string): Promise<void> {

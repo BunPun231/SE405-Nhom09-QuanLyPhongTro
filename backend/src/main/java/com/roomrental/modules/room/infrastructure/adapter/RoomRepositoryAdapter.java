@@ -42,6 +42,11 @@ public class RoomRepositoryAdapter implements RoomRepository {
     }
 
     @Override
+    public Page<Room> findByMotelIdAndStatus(Long motelId, com.roomrental.modules.room.domain.model.RoomStatus status, Pageable pageable) {
+        return jpa.findByMotelIdAndStatus(motelId, status, pageable).map(mapper::toDomain);
+    }
+
+    @Override
     public boolean existsByMotelIdAndRoomNumber(Long motelId, String roomNumber) {
         return jpa.existsByMotelIdAndRoomNumber(motelId, roomNumber);
     }

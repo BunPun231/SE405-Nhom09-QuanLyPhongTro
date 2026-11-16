@@ -98,8 +98,11 @@ public class RoomService {
      * UC27: List rooms of a motel with pagination.
      */
     @Transactional(readOnly = true)
-    public PageResponse<RoomResult> list(Long motelId, Pageable pageable) {
+    public PageResponse<RoomResult> list(Long motelId, RoomStatus status, Pageable pageable) {
         requireMotel(motelId);
+        if (status != null) {
+            return PageResponse.from(roomRepository.findByMotelIdAndStatus(motelId, status, pageable), this::toResult);
+        }
         return PageResponse.from(roomRepository.findByMotelId(motelId, pageable), this::toResult);
     }
 

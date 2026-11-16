@@ -1,9 +1,12 @@
-import { useState, useEffect } from "react";
-import { deviceService, DeviceResponse, DeviceMovementLogResponse } from "@/services/deviceService";
+﻿import { useState, useEffect } from "react";
+import { deviceService, DeviceResponse, DeviceMovementLogResponse, DeviceUsageResponse } from "@/services/deviceService";
 import { motelService, MotelResult } from "@/services/motelService";
 import { Wrench, Plus, Edit, Trash2, ArrowRightLeft, History, PlusCircle, MinusCircle, RotateCcw, Hammer, CheckCircle } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
+import { RoomSelector } from "@/components/ui/RoomSelector";
 
 export function DeviceListPage() {
+  const toast = useToast();
   const [motels, setMotels] = useState<MotelResult[]>([]);
   const [selectedMotelId, setSelectedMotelId] = useState<number | null>(null);
   const [devices, setDevices] = useState<DeviceResponse[]>([]);
@@ -19,6 +22,7 @@ export function DeviceListPage() {
   const [isLogsOpen, setIsLogsOpen] = useState(false);
   const [isSendToRepairOpen, setIsSendToRepairOpen] = useState(false);
   const [isFinishRepairOpen, setIsFinishRepairOpen] = useState(false);
+  const [showDeleted, setShowDeleted] = useState(false);
 
   const [activeDevice, setActiveDevice] = useState<DeviceResponse | null>(null);
   const [movementLogs, setMovementLogs] = useState<DeviceMovementLogResponse[]>([]);
@@ -30,7 +34,7 @@ export function DeviceListPage() {
   const [formTotalQuantity, setFormTotalQuantity] = useState("1");
 
   // Assign form states
-  const [assignRoomId, setAssignRoomId] = useState("");
+  const [assignRoomId, setAssignRoomId] = useState<number | null>(null);
   const [assignQuantity, setAssignQuantity] = useState("1");
   const [assignCondition, setAssignCondition] = useState("GOOD");
   const [assignNote, setAssignNote] = useState("");
@@ -44,9 +48,11 @@ export function DeviceListPage() {
   const [disposeReason, setDisposeReason] = useState("");
 
   // Recall form states
-  const [recallRoomId, setRecallRoomId] = useState("");
+  const [recallRoomId, setRecallRoomId] = useState<number | null>(null);
   const [recallQuantity, setRecallQuantity] = useState("1");
   const [recallNote, setRecallNote] = useState("");
+  const [roomUsages, setRoomUsages] = useState<DeviceUsageResponse[]>([]);
+  const [usagesLoading, setUsagesLoading] = useState(false);
 
   // Send-to-repair form states
   const [repairQuantity, setRepairQuantity] = useState("1");
@@ -64,7 +70,7 @@ export function DeviceListPage() {
     if (selectedMotelId) {
       loadDevices(selectedMotelId);
     }
-  }, [selectedMotelId]);
+  }, [selectedMotelId, showDeleted]);
 
   const loadMotels = async () => {
     try {
@@ -81,7 +87,7 @@ export function DeviceListPage() {
   const loadDevices = async (motelId: number) => {
     setLoading(true);
     try {
-      const res = await deviceService.getDevices(motelId);
+      const res = await deviceService.getDevices(motelId, { includeDeleted: showDeleted });
       setDevices(res.content);
     } catch (error) {
       console.error("Failed to load devices", error);
@@ -103,8 +109,9 @@ export function DeviceListPage() {
       setIsAddOpen(false);
       resetForm();
       loadDevices(selectedMotelId);
+      toast.success("Tạo thiết bị thành công!");
     } catch (error: any) {
-      alert(error.response?.data?.message || "Tạo thiết bị thất bại");
+      toast.error(error.response?.data?.message || "Tạo thiết bị thất bại");
     }
   };
 
@@ -120,8 +127,9 @@ export function DeviceListPage() {
       setIsEditOpen(false);
       resetForm();
       loadDevices(selectedMotelId);
+      toast.success("Cập nhật thiết bị thành công!");
     } catch (error: any) {
-      alert(error.response?.data?.message || "Cập nhật thất bại");
+      toast.error(error.response?.data?.message || "Cập nhật thất bại");
     }
   };
 
@@ -135,9 +143,9 @@ export function DeviceListPage() {
       });
       setIsImportOpen(false);
       loadDevices(selectedMotelId);
-      alert("Nhập thêm vào kho thành công!");
+      toast.success("Nhập thêm vào kho thành công!");
     } catch (error: any) {
-      alert(error.response?.data?.message || "Nhập kho thất bại");
+      toast.error(error.response?.data?.message || "Nhập kho thất bại");
     }
   };
 
@@ -151,19 +159,20 @@ export function DeviceListPage() {
       });
       setIsDisposeOpen(false);
       loadDevices(selectedMotelId);
-      alert("Xuất hủy / Báo hỏng thành công!");
+      toast.success("Xuất hủy / Báo hỏng thành công!");
     } catch (error: any) {
-      alert(error.response?.data?.message || "Xuất hủy thất bại");
+      toast.error(error.response?.data?.message || "Xuất hủy thất bại");
     }
   };
 
   const handleDelete = async (deviceId: number) => {
-    if (!selectedMotelId || !confirm("Bạn có chắc chắn muốn xóa thiết bị này khỏi danh mục?")) return;
+    if (!selectedMotelId) return;
     try {
       await deviceService.deleteDevice(selectedMotelId, deviceId);
       loadDevices(selectedMotelId);
+      toast.success("Xóa thiết bị thành công!");
     } catch (error: any) {
-      alert(error.response?.data?.message || "Xóa thất bại");
+      toast.error(error.response?.data?.message || "Xóa thất bại");
     }
   };
 
@@ -172,16 +181,16 @@ export function DeviceListPage() {
     if (!selectedMotelId || !activeDevice || !assignRoomId) return;
     try {
       await deviceService.assignDevice(selectedMotelId, activeDevice.id, {
-        roomId: Number(assignRoomId),
+        roomId: assignRoomId,
         assignedQuantity: Number(assignQuantity),
         condition: assignCondition,
         note: assignNote,
       });
       setIsAssignOpen(false);
       loadDevices(selectedMotelId);
-      alert("Gán thiết bị thành công!");
+      toast.success("Gán thiết bị thành công!");
     } catch (error: any) {
-      alert(error.response?.data?.message || "Gán thiết bị thất bại");
+      toast.error(error.response?.data?.message || "Gán thiết bị thất bại");
     }
   };
 
@@ -189,15 +198,15 @@ export function DeviceListPage() {
     e.preventDefault();
     if (!selectedMotelId || !activeDevice || !recallRoomId) return;
     try {
-      await deviceService.recallDevice(selectedMotelId, activeDevice.id, Number(recallRoomId), {
+      await deviceService.recallDevice(selectedMotelId, activeDevice.id, recallRoomId, {
         quantity: recallQuantity ? Number(recallQuantity) : undefined,
         note: recallNote,
       });
       setIsRecallOpen(false);
       loadDevices(selectedMotelId);
-      alert("Thu hồi thiết bị từ phòng về kho thành công!");
+      toast.success("Thu hồi thiết bị từ phòng về kho thành công!");
     } catch (error: any) {
-      alert(error.response?.data?.message || "Thu hồi thiết bị thất bại");
+      toast.error(error.response?.data?.message || "Thu hồi thiết bị thất bại");
     }
   };
 
@@ -209,7 +218,7 @@ export function DeviceListPage() {
       setMovementLogs(logs);
       setIsLogsOpen(true);
     } catch (error) {
-      alert("Không thể tải nhật ký");
+      toast.error("Không thể tải nhật ký");
     }
   };
 
@@ -231,9 +240,9 @@ export function DeviceListPage() {
       });
       setIsSendToRepairOpen(false);
       loadDevices(selectedMotelId);
-      alert("Gửi thiết bị đi sửa chữa thành công!");
+      toast.success("Gửi thiết bị đi sửa chữa thành công!");
     } catch (error: any) {
-      alert(error.response?.data?.message || "Gửi đi sửa thất bại");
+      toast.error(error.response?.data?.message || "Gửi đi sửa thất bại");
     }
   };
 
@@ -247,9 +256,9 @@ export function DeviceListPage() {
       });
       setIsFinishRepairOpen(false);
       loadDevices(selectedMotelId);
-      alert("Xác nhận sửa xong về kho thành công!");
+      toast.success("Xác nhận sửa xong về kho thành công!");
     } catch (error: any) {
-      alert(error.response?.data?.message || "Xác nhận sửa xong thất bại");
+      toast.error(error.response?.data?.message || "Xác nhận sửa xong thất bại");
     }
   };
 
@@ -277,7 +286,7 @@ export function DeviceListPage() {
 
   const openAssign = (device: DeviceResponse) => {
     setActiveDevice(device);
-    setAssignRoomId("");
+    setAssignRoomId(null);
     setAssignQuantity("1");
     setAssignCondition("GOOD");
     setAssignNote("");
@@ -298,12 +307,24 @@ export function DeviceListPage() {
     setIsDisposeOpen(true);
   };
 
-  const openRecall = (device: DeviceResponse) => {
+  const openRecall = async (device: DeviceResponse) => {
     setActiveDevice(device);
-    setRecallRoomId("");
+    setRecallRoomId(null);
     setRecallQuantity("1");
     setRecallNote("");
+    setRoomUsages([]);
     setIsRecallOpen(true);
+    if (selectedMotelId) {
+      setUsagesLoading(true);
+      try {
+        const usages = await deviceService.getDeviceUsages(selectedMotelId, device.id);
+        setRoomUsages(usages);
+      } catch (error) {
+        toast.error("Không thể tải danh sách phòng đang gán thiết bị");
+      } finally {
+        setUsagesLoading(false);
+      }
+    }
   };
 
   const statusBadge = (device: DeviceResponse) => {
@@ -322,6 +343,10 @@ export function DeviceListPage() {
     );
   };
 
+  const activeUsages = roomUsages.filter((u) => u.assignedQuantity > 0);
+  const selectedUsage = activeUsages.find((u) => u.roomId === recallRoomId);
+  const maxRecall = selectedUsage?.assignedQuantity ?? 0;
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -334,6 +359,21 @@ export function DeviceListPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          <div className="flex bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+            <button
+              onClick={() => setShowDeleted(false)}
+              className={`px-3 py-1.5 rounded-lg transition ${!showDeleted ? "bg-white text-indigo-600 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+            >
+              Đang hoạt động
+            </button>
+            <button
+              onClick={() => setShowDeleted(true)}
+              className={`px-3 py-1.5 rounded-lg transition ${showDeleted ? "bg-white text-rose-600 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}
+            >
+              Đã xóa
+            </button>
+          </div>
+
           <select
             value={selectedMotelId || ""}
             onChange={(e) => setSelectedMotelId(Number(e.target.value))}
@@ -399,53 +439,57 @@ export function DeviceListPage() {
                     <td className="px-6 py-4 text-center font-bold text-emerald-600">{device.availableQuantity ?? 0}</td>
                     <td className="px-6 py-4">{statusBadge(device)}</td>
                     <td className="px-6 py-4 text-right space-x-1.5 whitespace-nowrap">
-                      <button
-                        onClick={() => openAssign(device)}
-                        title="Gán vào phòng"
-                        className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
-                      >
-                        <ArrowRightLeft className="h-3.5 w-3.5" /> Gán
-                      </button>
-                      {device.inUseQuantity > 0 && (
-                        <button
-                          onClick={() => openRecall(device)}
-                          title="Thu hồi thiết bị từ phòng về kho"
-                          className="inline-flex items-center gap-1 rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-100"
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" /> Thu hồi
-                        </button>
-                      )}
-                      <button
-                        onClick={() => openImport(device)}
-                        title="Nhập thêm hàng vào kho"
-                        className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
-                      >
-                        <PlusCircle className="h-3.5 w-3.5" /> Nhập
-                      </button>
-                      <button
-                        onClick={() => openDispose(device)}
-                        title="Xuất hủy / Báo hỏng khỏi kho"
-                        className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
-                      >
-                        <MinusCircle className="h-3.5 w-3.5" /> Hủy
-                      </button>
-                      {device.availableQuantity > 0 && (
-                        <button
-                          onClick={() => openSendToRepair(device)}
-                          title="Gửi đi sửa chữa"
-                          className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
-                        >
-                          <Hammer className="h-3.5 w-3.5" /> Gửi sửa
-                        </button>
-                      )}
-                      {device.repairingQuantity > 0 && (
-                        <button
-                          onClick={() => openFinishRepair(device)}
-                          title="Sửa xong – trả về kho"
-                          className="inline-flex items-center gap-1 rounded-md bg-teal-50 px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-100"
-                        >
-                          <CheckCircle className="h-3.5 w-3.5" /> Sửa xong
-                        </button>
+                      {!showDeleted && (
+                        <>
+                          <button
+                            onClick={() => openAssign(device)}
+                            title="Gán vào phòng"
+                            className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
+                          >
+                            <ArrowRightLeft className="h-3.5 w-3.5" /> Gán
+                          </button>
+                          {device.inUseQuantity > 0 && (
+                            <button
+                              onClick={() => openRecall(device)}
+                              title="Thu hồi thiết bị từ phòng về kho"
+                              className="inline-flex items-center gap-1 rounded-md bg-orange-50 px-2 py-1 text-xs font-medium text-orange-700 hover:bg-orange-100"
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" /> Thu hồi
+                            </button>
+                          )}
+                          <button
+                            onClick={() => openImport(device)}
+                            title="Nhập thêm hàng vào kho"
+                            className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
+                          >
+                            <PlusCircle className="h-3.5 w-3.5" /> Nhập
+                          </button>
+                          <button
+                            onClick={() => openDispose(device)}
+                            title="Xuất hủy / Báo hỏng khỏi kho"
+                            className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-100"
+                          >
+                            <MinusCircle className="h-3.5 w-3.5" /> Hủy
+                          </button>
+                          {device.availableQuantity > 0 && (
+                            <button
+                              onClick={() => openSendToRepair(device)}
+                              title="Gửi đi sửa chữa"
+                              className="inline-flex items-center gap-1 rounded-md bg-rose-50 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                            >
+                              <Hammer className="h-3.5 w-3.5" /> Gửi sửa
+                            </button>
+                          )}
+                          {device.repairingQuantity > 0 && (
+                            <button
+                              onClick={() => openFinishRepair(device)}
+                              title="Sửa xong – trả về kho"
+                              className="inline-flex items-center gap-1 rounded-md bg-teal-50 px-2 py-1 text-xs font-medium text-teal-700 hover:bg-teal-100"
+                            >
+                              <CheckCircle className="h-3.5 w-3.5" /> Sửa xong
+                            </button>
+                          )}
+                        </>
                       )}
                       <button
                         onClick={() => handleViewLogs(device)}
@@ -454,20 +498,24 @@ export function DeviceListPage() {
                       >
                         <History className="h-3.5 w-3.5" /> Log
                       </button>
-                      <button
-                        onClick={() => openEdit(device)}
-                        title="Sửa thông tin"
-                        className="p-1 text-slate-400 hover:text-indigo-600"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(device.id)}
-                        title="Xóa thiết bị"
-                        className="p-1 text-slate-400 hover:text-rose-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {!showDeleted && (
+                        <>
+                          <button
+                            onClick={() => openEdit(device)}
+                            title="Sửa thông tin"
+                            className="p-1 text-slate-400 hover:text-indigo-600"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(device.id)}
+                            title="Xóa thiết bị"
+                            className="p-1 text-slate-400 hover:text-rose-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))
@@ -479,8 +527,8 @@ export function DeviceListPage() {
 
       {/* Modal Add Device */}
       {isAddOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
             <h2 className="text-lg font-bold text-slate-900 mb-4">Nhập Kho Thiết bị Mới</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
@@ -547,8 +595,8 @@ export function DeviceListPage() {
 
       {/* Modal Edit Device - Only General Info */}
       {isEditOpen && activeDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
             <h2 className="text-lg font-bold text-slate-900 mb-1">Sửa Thông tin Thiết bị</h2>
             <p className="text-xs text-slate-500 mb-4">
               Tổng kho: <strong>{activeDevice.totalQuantity}</strong> | Khả dụng: <strong className="text-emerald-600">{activeDevice.availableQuantity}</strong>
@@ -607,8 +655,8 @@ export function DeviceListPage() {
 
       {/* Modal Import Stock */}
       {isImportOpen && activeDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
             <h2 className="text-lg font-bold text-slate-900 mb-1">Nhập Thêm Hàng Vào Kho</h2>
             <div className="text-xs rounded-lg bg-emerald-50 p-3 mb-4 space-y-1 text-emerald-900 border border-emerald-200">
               <div>Thiết bị: <strong className="text-emerald-700">{activeDevice.name}</strong></div>
@@ -658,8 +706,8 @@ export function DeviceListPage() {
 
       {/* Modal Dispose Stock */}
       {isDisposeOpen && activeDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
             <h2 className="text-lg font-bold text-slate-900 mb-1">Xuất Hủy / Báo Hỏng Thiết Bị</h2>
             <div className="text-xs rounded-lg bg-amber-50 p-3 mb-4 space-y-1 text-amber-900 border border-amber-200">
               <div>Thiết bị: <strong className="text-amber-800">{activeDevice.name}</strong></div>
@@ -712,8 +760,8 @@ export function DeviceListPage() {
 
       {/* Modal Assign Device */}
       {isAssignOpen && activeDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
             <h2 className="text-lg font-bold text-slate-900 mb-1">Gán Thiết bị vào Phòng</h2>
             <div className="text-xs rounded-lg bg-slate-50 p-3 mb-4 space-y-1">
               <div>Thiết bị: <strong className="text-indigo-600">{activeDevice.name}</strong></div>
@@ -722,14 +770,13 @@ export function DeviceListPage() {
             </div>
             <form onSubmit={handleAssignSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Mã/ID Phòng *</label>
-                <input
-                  type="number"
-                  required
+                <label className="block text-sm font-medium text-slate-700 mb-1">Chọn phòng để gán (chỉ phòng đang thuê) *</label>
+                <RoomSelector
+                  motelId={selectedMotelId || 0}
+                  filterStatus="RENTED"
                   value={assignRoomId}
-                  onChange={(e) => setAssignRoomId(e.target.value)}
-                  placeholder="Nhập Room ID"
-                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  onChange={(roomId) => setAssignRoomId(roomId)}
+                  placeholder="Tìm và chọn phòng..."
                 />
               </div>
               <div>
@@ -787,36 +834,71 @@ export function DeviceListPage() {
 
       {/* Modal Recall Device */}
       {isRecallOpen && activeDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
             <h2 className="text-lg font-bold text-slate-900 mb-1">Thu Hồi Thiết Bị Về Kho</h2>
             <p className="text-xs text-slate-500 mb-4">
               Thu hồi thiết bị <strong>{activeDevice.name}</strong> từ phòng trọ về lại kho vật tư
             </p>
             <form onSubmit={handleRecallSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Mã/ID Phòng thu hồi *</label>
-                <input
-                  type="number"
-                  required
-                  value={recallRoomId}
-                  onChange={(e) => setRecallRoomId(e.target.value)}
-                  placeholder="Nhập Room ID"
-                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
-                />
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Chọn phòng đang gán thiết bị này *
+                </label>
+                {usagesLoading ? (
+                  <p className="text-xs text-slate-500 py-2">Đang tải danh sách phòng...</p>
+                ) : activeUsages.length === 0 ? (
+                  <p className="text-xs font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                    Thiết bị này hiện chưa được gán cho phòng nào.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto pr-1">
+                    {activeUsages.map((u) => {
+                      const isSelected = u.roomId === recallRoomId;
+                      return (
+                        <button
+                          key={u.roomId}
+                          type="button"
+                          onClick={() => {
+                            setRecallRoomId(u.roomId);
+                            setRecallQuantity(String(u.assignedQuantity));
+                          }}
+                          className={`rounded-xl border p-3 text-left transition ${
+                            isSelected
+                              ? "border-orange-500 bg-orange-50 ring-2 ring-orange-200"
+                              : "border-slate-200 bg-white hover:border-orange-300 hover:bg-orange-50/40"
+                          }`}
+                        >
+                          <span className="block text-sm font-bold text-slate-900">
+                            Phòng {u.roomNumber || u.roomId}
+                          </span>
+                          <span className="block text-xs text-slate-600 mt-0.5">
+                            Đang gán: <strong className="text-orange-700">{u.assignedQuantity}</strong> cái
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Số lượng thu hồi (Đang gán toàn hệ thống: {activeDevice.inUseQuantity})
+                  Số lượng thu hồi (Tối đa theo phòng: {maxRecall})
                 </label>
                 <input
                   type="number"
                   min="1"
-                  max={activeDevice.inUseQuantity}
+                  max={maxRecall || undefined}
+                  disabled={!recallRoomId}
                   value={recallQuantity}
                   onChange={(e) => setRecallQuantity(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none disabled:bg-slate-50"
                 />
+                {recallRoomId && Number(recallQuantity) > maxRecall && (
+                  <p className="mt-1 text-xs font-medium text-rose-600">
+                    Số lượng thu hồi vượt quá số đang gán của phòng này.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Ghi chú / Lý do thu hồi</label>
@@ -850,8 +932,8 @@ export function DeviceListPage() {
 
       {/* Modal Send To Repair */}
       {isSendToRepairOpen && activeDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
             <h2 className="text-lg font-bold text-slate-900 mb-1">Gửi Thiết Bị Đi Sửa Chữa</h2>
             <p className="text-xs text-slate-500 mb-4">
               Thiết bị: <strong>{activeDevice.name}</strong> | Khả dụng: <strong className="text-emerald-600">{activeDevice.availableQuantity}</strong> | Đang sửa: <strong className="text-amber-600">{activeDevice.repairingQuantity}</strong>
@@ -903,8 +985,8 @@ export function DeviceListPage() {
 
       {/* Modal Finish Repair */}
       {isFinishRepairOpen && activeDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
             <h2 className="text-lg font-bold text-slate-900 mb-1">Xác Nhận Sửa Xong – Nhập Lại Kho</h2>
             <p className="text-xs text-slate-500 mb-4">
               Thiết bị: <strong>{activeDevice.name}</strong> | Đang sửa: <strong className="text-amber-600">{activeDevice.repairingQuantity}</strong>
@@ -956,8 +1038,8 @@ export function DeviceListPage() {
 
       {/* Modal Movement Logs (Full Audit Trail) */}
       {isLogsOpen && activeDevice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-xl rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
             <h2 className="text-lg font-bold text-slate-900 mb-1">Lịch sử Biến động Thiết bị (Audit Trail)</h2>
             <p className="text-xs text-slate-500 mb-4">
               Thiết bị: <strong className="text-indigo-600">{activeDevice.name}</strong> | Tổng tồn hiện tại: <strong>{activeDevice.totalQuantity}</strong>
@@ -1007,8 +1089,13 @@ export function DeviceListPage() {
                         <span className="text-slate-400 text-[11px]">{new Date(log.timestamp).toLocaleString("vi-VN")}</span>
                       </div>
                       <div className="text-slate-600">
-                        {log.fromRoomId && <span>Từ phòng: <strong>#{log.fromRoomId}</strong> </span>}
-                        {log.toRoomId && <span>Đến phòng: <strong>#{log.toRoomId}</strong> </span>}
+                        {log.fromRoomId && (
+                          <span>Từ <strong>{log.fromRoomNumber ? `Phòng ${log.fromRoomNumber}` : "Kho"}</strong> </span>
+                        )}
+                        {log.toRoomId && (
+                          <span>Đến <strong>{log.toRoomNumber ? `Phòng ${log.toRoomNumber}` : "Kho"}</strong> </span>
+                        )}
+                        {!log.fromRoomId && !log.toRoomId && <span className="text-slate-400">Không gắn với phòng (kho tổng)</span>}
                       </div>
                       {log.note && <div className="text-slate-500 italic bg-white p-1.5 rounded border border-slate-100">Ghi chú / Lý do: {log.note}</div>}
                     </div>

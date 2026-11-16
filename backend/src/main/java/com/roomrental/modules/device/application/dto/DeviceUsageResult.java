@@ -8,6 +8,7 @@ public record DeviceUsageResult(
         String deviceName,
         String brand,
         Long roomId,
+        String roomNumber,
         Integer assignedQuantity,
         String condition,
         OffsetDateTime assignedAt,

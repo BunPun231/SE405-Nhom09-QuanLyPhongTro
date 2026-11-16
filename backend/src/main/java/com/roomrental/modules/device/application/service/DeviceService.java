@@ -78,7 +78,7 @@ public class DeviceService {
         UUID tenantId = SecurityUtils.requireTenantId();
         eventPublisher.publishEvent(new DeviceCreatedEvent(
                 tenantId, SecurityUtils.getCurrentUserId(), SecurityUtils.getCurrentRole(),
-                result.id(), result.name()));
+                result.id(), result.name(), result.brand()));
         return result;
     }
 
@@ -102,6 +102,7 @@ public class DeviceService {
     public DeviceResult update(Long motelId, Long deviceId, DeviceUpdateCommand command) {
         Device device = findDevice(motelId, deviceId);
         String oldName = device.getName();
+        java.math.BigDecimal oldPrice = device.getPurchasePrice();
 
         if (command.name() != null) device.setName(command.name());
         if (command.brand() != null) device.setBrand(command.brand());
@@ -119,7 +120,13 @@ public class DeviceService {
         UUID tenantId = SecurityUtils.requireTenantId();
         eventPublisher.publishEvent(new DeviceUpdatedEvent(
                 tenantId, SecurityUtils.getCurrentUserId(), SecurityUtils.getCurrentRole(),
-                result.id(), oldName, result.name()));
+                result.id(), oldName, result.name(), result.brand()));
+
+        if (command.purchasePrice() != null && (oldPrice == null || !oldPrice.equals(command.purchasePrice()))) {
+            eventPublisher.publishEvent(new com.roomrental.modules.device.application.event.DevicePriceUpdatedEvent(
+                    tenantId, SecurityUtils.getCurrentUserId(), SecurityUtils.getCurrentRole(),
+                    result.id(), result.name(), result.brand(), oldPrice, command.purchasePrice()));
+        }
         return result;
     }
 
@@ -180,13 +187,13 @@ public class DeviceService {
         UUID tenantId = SecurityUtils.requireTenantId();
         eventPublisher.publishEvent(new DeviceDeletedEvent(
                 tenantId, SecurityUtils.getCurrentUserId(), SecurityUtils.getCurrentRole(),
-                deviceId, device.getName()));
+                deviceId, device.getName(), device.getBrand()));
     }
 
     @Transactional(readOnly = true)
     public List<DeviceUsageResult> getDevicesByRoom(Long motelId, Long roomId) {
         requireMotel(motelId);
-        roomRepository.findByIdAndMotelId(roomId, motelId)
+        var room = roomRepository.findByIdAndMotelId(roomId, motelId)
                 .orElseThrow(() -> BaseException.notFound("Room", roomId));
 
         return deviceUsageJpaRepository.findByRoomId(roomId).stream()
@@ -196,7 +203,24 @@ public class DeviceService {
                     String brand = device != null ? device.getBrand() : "";
                     return new DeviceUsageResult(
                             usage.getId(), usage.getDeviceId(), name, brand,
-                            usage.getRoomId(), usage.getAssignedQuantity(), usage.getCondition(),
+                            usage.getRoomId(), room.getRoomNumber(), usage.getAssignedQuantity(), usage.getCondition(),
+                            usage.getAssignedAt(), usage.getUpdatedAt());
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Transactional(readOnly = true)
+    public List<DeviceUsageResult> getUsagesByDevice(Long motelId, Long deviceId) {
+        Device device = findDevice(motelId, deviceId);
+        return deviceUsageJpaRepository.findByDeviceId(deviceId).stream()
+                .filter(usage -> usage.getAssignedQuantity() != null && usage.getAssignedQuantity() > 0)
+                .map(usage -> {
+                    String roomNumber = roomRepository.findById(usage.getRoomId())
+                            .map(com.roomrental.modules.room.domain.model.Room::getRoomNumber)
+                            .orElse(null);
+                    return new DeviceUsageResult(
+                            usage.getId(), usage.getDeviceId(), device.getName(), device.getBrand(),
+                            usage.getRoomId(), roomNumber, usage.getAssignedQuantity(), usage.getCondition(),
                             usage.getAssignedAt(), usage.getUpdatedAt());
                 })
                 .collect(Collectors.toList());
@@ -205,7 +229,7 @@ public class DeviceService {
     @Transactional
     public DeviceUsageResult assignDeviceToRoom(Long motelId, Long deviceId, DeviceAssignCommand command) {
         Device device = findDevice(motelId, deviceId);
-        roomRepository.findByIdAndMotelId(command.roomId(), motelId)
+        var targetRoom = roomRepository.findByIdAndMotelId(command.roomId(), motelId)
                 .orElseThrow(() -> BaseException.notFound("Room", command.roomId()));
 
         if (command.assignedQuantity() == null || command.assignedQuantity() <= 0) {
@@ -249,7 +273,7 @@ public class DeviceService {
 
         return new DeviceUsageResult(
                 savedUsage.getId(), deviceId, device.getName(), device.getBrand(),
-                command.roomId(), savedUsage.getAssignedQuantity(), savedUsage.getCondition(),
+                command.roomId(), targetRoom.getRoomNumber(), savedUsage.getAssignedQuantity(), savedUsage.getCondition(),
                 savedUsage.getAssignedAt(), savedUsage.getUpdatedAt());
     }
 
@@ -297,12 +321,25 @@ public class DeviceService {
     public List<DeviceMovementLogResult> getMovementLogs(Long motelId, Long deviceId) {
         findDeviceIncludingDeleted(motelId, deviceId);
         return deviceMovementLogJpaRepository.findByDeviceIdOrderByTimestampDesc(deviceId).stream()
-                .map(l -> new DeviceMovementLogResult(
-                        l.getId(), l.getDeviceId(), l.getFromRoomId(), l.getToRoomId(),
-                        l.getAction(), l.getQuantity(), l.getChangedBy(), l.getTimestamp(), l.getNote(),
-                        l.getSnapshotTotalQuantity(), l.getSnapshotAvailableQuantity(),
-                        l.getSnapshotRepairingQuantity(), l.getSnapshotInUseQuantity()))
-                .collect(Collectors.toList());
+                .map(l -> {
+                    String fromNumber = null;
+                    String toNumber = null;
+                    if (l.getFromRoomId() != null) {
+                        var room = roomRepository.findById(l.getFromRoomId()).orElse(null);
+                        fromNumber = room != null ? room.getRoomNumber() : null;
+                    }
+                    if (l.getToRoomId() != null) {
+                        var room = roomRepository.findById(l.getToRoomId()).orElse(null);
+                        toNumber = room != null ? room.getRoomNumber() : null;
+                    }
+                    return new DeviceMovementLogResult(
+                            l.getId(), l.getDeviceId(), l.getFromRoomId(), fromNumber,
+                            l.getToRoomId(), toNumber,
+                            l.getAction(), l.getQuantity(), l.getChangedBy(), l.getTimestamp(), l.getNote(),
+                            l.getSnapshotTotalQuantity(), l.getSnapshotAvailableQuantity(),
+                            l.getSnapshotRepairingQuantity(), l.getSnapshotInUseQuantity()
+                    );
+                }).collect(Collectors.toList());
     }
 
     private Motel requireMotel(Long motelId) {

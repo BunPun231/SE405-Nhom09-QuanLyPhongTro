@@ -20,6 +20,7 @@ export interface DeviceUsageResponse {
   deviceName: string;
   brand?: string;
   roomId: number;
+  roomNumber?: string;
   assignedQuantity: number;
   condition: string;
   assignedAt: string;
@@ -30,7 +31,9 @@ export interface DeviceMovementLogResponse {
   id: number;
   deviceId: number;
   fromRoomId?: number;
+  fromRoomNumber?: string;
   toRoomId?: number;
+  toRoomNumber?: string;
   action: "ASSIGN" | "RECALL" | "IMPORT" | "DISPOSE" | "MAINTENANCE_USE" | "SEND_TO_REPAIR" | "FINISH_REPAIR";
   quantity: number;
   changedBy: string;
@@ -81,7 +84,7 @@ export const deviceService = {
   },
 
   /** UC41 - List devices */
-  async getDevices(motelId: number, params?: { page?: number; size?: number }): Promise<PageResponse<DeviceResponse>> {
+  async getDevices(motelId: number, params?: { page?: number; size?: number; includeDeleted?: boolean }): Promise<PageResponse<DeviceResponse>> {
     const res = await api.get<{ data: PageResponse<DeviceResponse> }>(`/api/motels/${motelId}/devices`, { params });
     return res.data.data;
   },
@@ -107,6 +110,12 @@ export const deviceService = {
   /** Dispose / report broken devices from stock */
   async disposeStock(motelId: number, deviceId: number, body: { quantity: number; reason?: string }): Promise<DeviceResponse> {
     const res = await api.post<{ data: DeviceResponse }>(`/api/motels/${motelId}/devices/${deviceId}/dispose`, body);
+    return res.data.data;
+  },
+
+  /** Rooms where a device is currently assigned (with quantities) */
+  async getDeviceUsages(motelId: number, deviceId: number): Promise<DeviceUsageResponse[]> {
+    const res = await api.get<{ data: DeviceUsageResponse[] }>(`/api/motels/${motelId}/devices/${deviceId}/usages`);
     return res.data.data;
   },
 

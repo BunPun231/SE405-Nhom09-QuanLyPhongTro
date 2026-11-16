@@ -8,6 +8,7 @@ import { useNotificationStore } from "@/store/notificationStore";
 import { Copy, Check, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { useTourGuide } from "@/hooks/useTourGuide";
 import { useAuthStore } from "@/store/authStore";
+import { useToast } from "@/components/ui/Toast";
 
 interface VietQrPaymentModalProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ interface PaymentInfo {
 }
 
 export function VietQrPaymentModal({ isOpen, onClose, invoiceId, onSuccess }: VietQrPaymentModalProps) {
+  const toast = useToast();
   const { user } = useAuthStore();
   const { completeTenantOnboarding } = useTourGuide();
   const [loading, setLoading] = useState(true);
@@ -110,7 +112,7 @@ export function VietQrPaymentModal({ isOpen, onClose, invoiceId, onSuccess }: Vi
             api.get<PaymentInfo>(`/api/v1/invoices/${invoiceId}/payment-info`)
               .then((piRes) => {
                 setPaymentInfo(piRes.data);
-                alert(`Bạn đã thanh toán một phần thành công! Số tiền còn lại cần thanh toán: ${formatCurrency(piRes.data.amount)}`);
+                toast.warning(`Bạn đã thanh toán một phần thành công! Số tiền còn lại cần thanh toán: ${formatCurrency(piRes.data.amount)}`);
                 // Trigger onSuccess to update parent invoice lists in the background
                 onSuccess();
               })

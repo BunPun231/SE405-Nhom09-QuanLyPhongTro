@@ -1,12 +1,16 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { maintenanceService, MaintenanceTicketResponse } from "@/services/maintenanceService";
 import { technicianService, TechnicianResponse } from "@/services/technicianService";
 import { motelService, MotelResult } from "@/services/motelService";
 import { deviceService, DeviceResponse } from "@/services/deviceService";
 import { useAuthStore } from "@/store/authStore";
-import { Hammer, Plus, UserCheck, CheckCircle2, Image as ImageIcon } from "lucide-react";
+import { Hammer, Plus, UserCheck, CheckCircle2, Image as ImageIcon, XCircle } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
+import { RoomSelector } from "@/components/ui/RoomSelector";
+import { TicketDetailModal } from "@/features/maintenance/components/TicketDetailModal";
 
 export function MaintenancePage() {
+  const toast = useToast();
   const { user } = useAuthStore();
   const roleStr = (user?.role as string) || "";
   const isTenant = roleStr === "TENANT" || roleStr === "RESIDENT";
@@ -22,10 +26,12 @@ export function MaintenancePage() {
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [isCompleteOpen, setIsCompleteOpen] = useState(false);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [isCancelOpen, setIsCancelOpen] = useState(false);
   const [activeTicket, setActiveTicket] = useState<MaintenanceTicketResponse | null>(null);
 
   // Form states - Tenant Report
-  const [roomIdInput, setRoomIdInput] = useState("");
+  const [roomIdInput, setRoomIdInput] = useState<number | null>(null);
   const [categoryInput, setCategoryInput] = useState("DIEN_NUOC");
   const [descriptionInput, setDescriptionInput] = useState("");
   const [priorityInput, setPriorityInput] = useState("MEDIUM");
@@ -47,6 +53,9 @@ export function MaintenancePage() {
       loadMotels();
     } else if (isTechnician) {
       loadMyTasks();
+    } else if (isTenant) {
+      loadMotels();
+      loadMyTickets();
     } else {
       loadMyTickets();
     }
@@ -104,6 +113,9 @@ export function MaintenancePage() {
     }
   };
 
+  // Form states - Cancel Ticket
+  const [cancelReasonInput, setCancelReasonInput] = useState("");
+
   const handleReportSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!roomIdInput || !descriptionInput) return;
@@ -119,13 +131,13 @@ export function MaintenancePage() {
         },
         beforeFiles
       );
-      alert("Gửi báo cáo sự cố thành công! Backend đã upload ảnh lên Cloudinary.");
+      toast.success("Gửi báo cáo sự cố thành công!");
       setIsReportOpen(false);
       resetReportForm();
       if (isManager && selectedMotelId) loadMotelTickets(selectedMotelId);
-      else loadMyTickets();
+      else if (isTenant) loadMyTickets();
     } catch (error: any) {
-      alert(error.response?.data?.message || "Tạo phiếu bảo trì thất bại");
+      toast.error(error.response?.data?.message || "Tạo phiếu bảo trì thất bại");
     } finally {
       setLoading(false);
     }
@@ -135,11 +147,13 @@ export function MaintenancePage() {
     setActiveTicket(ticket);
     try {
       const res = await technicianService.getTechnicians();
-      setTechnicians(res.content);
-      setSelectedTechId(res.content[0]?.userId || "");
+      // Filter out locked technicians
+      const activeTechs = res.content.filter((t) => t.status === "ACTIVE");
+      setTechnicians(activeTechs);
+      setSelectedTechId(activeTechs[0]?.userId || "");
       setIsAssignOpen(true);
     } catch (e) {
-      alert("Không thể tải danh sách KTV");
+      toast.error("Không thể tải danh sách KTV");
     }
   };
 
@@ -149,11 +163,11 @@ export function MaintenancePage() {
 
     try {
       await maintenanceService.assignTechnician(activeTicket.id, selectedTechId);
-      alert("Phân công KTV thành công!");
+      toast.success("Phân công KTV thành công!");
       setIsAssignOpen(false);
       if (selectedMotelId) loadMotelTickets(selectedMotelId);
-    } catch (e) {
-      alert("Phân công thất bại");
+    } catch (e: any) {
+      toast.error(e.response?.data?.message || "Phân công thất bại");
     }
   };
 
@@ -192,19 +206,38 @@ export function MaintenancePage() {
         { usedDevices, note: completeNote },
         afterFiles
       );
-      alert("Hoàn thành bảo trì thành công! Backend đã cập nhật trạng thái và trừ kho vật tư.");
+      toast.success("Hoàn thành bảo trì thành công!");
       setIsCompleteOpen(false);
       if (isTechnician) loadMyTasks();
       else if (selectedMotelId) loadMotelTickets(selectedMotelId);
     } catch (error: any) {
-      alert(error.response?.data?.message || "Hoàn thành phiếu bảo trì thất bại");
+      toast.error(error.response?.data?.message || "Hoàn thành phiếu bảo trì thất bại");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeTicket) return;
+
+    try {
+      setLoading(true);
+      await maintenanceService.cancelTicket(activeTicket.id, cancelReasonInput);
+      toast.success("Đã hủy phiếu bảo trì thành công");
+      setIsCancelOpen(false);
+      setCancelReasonInput("");
+      if (isManager && selectedMotelId) loadMotelTickets(selectedMotelId);
+      else if (isTenant) loadMyTickets();
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Hủy phiếu thất bại");
     } finally {
       setLoading(false);
     }
   };
 
   const resetReportForm = () => {
-    setRoomIdInput("");
+    setRoomIdInput(null);
     setCategoryInput("DIEN_NUOC");
     setDescriptionInput("");
     setPriorityInput("MEDIUM");
@@ -275,7 +308,14 @@ export function MaintenancePage() {
           <div className="col-span-full py-12 text-center text-slate-400">Chưa có thông tin sự cố nào</div>
         ) : (
           tickets.map((ticket) => (
-            <div key={ticket.id} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition space-y-4">
+            <div
+              key={ticket.id}
+              onClick={() => {
+                setActiveTicket(ticket);
+                setIsDetailOpen(true);
+              }}
+              className="flex flex-col h-full rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition space-y-4 cursor-pointer"
+            >
               <div className="flex items-start justify-between">
                 <div>
                   <span className="text-xs font-bold text-indigo-600 uppercase tracking-wide">Phòng {ticket.roomNumber}</span>
@@ -333,52 +373,80 @@ export function MaintenancePage() {
               )}
 
               {/* Actions */}
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-end gap-2">
-                {isManager && ticket.status === "OPEN" && (
-                  <button
-                    onClick={() => openAssignModal(ticket)}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
-                  >
-                    <UserCheck className="h-3.5 w-3.5" /> Phân công KTV
-                  </button>
-                )}
-                {(isTechnician || isManager) && ticket.status !== "COMPLETED" && (
-                  <button
-                    onClick={() => openCompleteModal(ticket)}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
-                  >
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Cập nhật hoàn thành
-                  </button>
-                )}
-              </div>
+              {((isManager && ticket.status === "OPEN") ||
+                ((isTechnician || isManager) && ["OPEN", "ASSIGNED", "PROCESSING"].includes(ticket.status))) && (
+                <div className="mt-auto pt-3 border-t border-slate-100 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                  {isManager && ticket.status === "OPEN" && (
+                    <button
+                      type="button"
+                      onClick={() => openAssignModal(ticket)}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-2 text-xs font-medium text-indigo-700 hover:bg-indigo-100 whitespace-nowrap"
+                    >
+                      <UserCheck className="h-3.5 w-3.5" /> Phân công
+                    </button>
+                  )}
+                  {((isTechnician && ["OPEN", "ASSIGNED", "PROCESSING"].includes(ticket.status)) ||
+                    (isManager && ["OPEN", "ASSIGNED", "PROCESSING"].includes(ticket.status))) && (
+                    <button
+                      type="button"
+                      onClick={() => openCompleteModal(ticket)}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-2 text-xs font-medium text-white hover:bg-emerald-700 whitespace-nowrap"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" /> Hoàn thành
+                    </button>
+                  )}
+                  {isManager && (ticket.status === "OPEN" || ticket.status === "ASSIGNED") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActiveTicket(ticket);
+                        setCancelReasonInput("");
+                        setIsCancelOpen(true);
+                      }}
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-2 text-xs font-medium text-rose-700 hover:bg-rose-100 whitespace-nowrap"
+                    >
+                      <XCircle className="h-3.5 w-3.5" /> Hủy
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))
         )}
       </div>
 
+      {/* Ticket Detail Modal */}
+      <TicketDetailModal
+        ticket={activeTicket}
+        isOpen={isDetailOpen}
+        onClose={() => setIsDetailOpen(false)}
+      />
+
       {/* Modal Report Incident */}
       {isReportOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
             <h2 className="text-lg font-bold text-slate-900 mb-4">Báo cáo Sự cố mới</h2>
             <form onSubmit={handleReportSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Mã/ID Phòng *</label>
-                <input
-                  type="number"
-                  required
+                <label className="block text-sm font-medium text-slate-700 mb-1">Chọn phòng *</label>
+                <RoomSelector
+                  motelId={selectedMotelId || 0}
+                  filterStatus={["RENTED", "REPAIRING"]}
                   value={roomIdInput}
-                  onChange={(e) => setRoomIdInput(e.target.value)}
-                  placeholder="Nhập ID phòng"
-                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  onChange={(roomId) => setRoomIdInput(roomId)}
+                  placeholder="Chọn phòng đang có khách thuê..."
                 />
+                <p className="mt-1 text-xs text-slate-500">
+                  Chỉ hiển thị phòng đã có khách thuê (đang thuê / đang sửa chữa).
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Danh mục</label>
                 <select
                   value={categoryInput}
                   onChange={(e) => setCategoryInput(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
                 >
                   <option value="DIEN_NUOC">Điện nước</option>
                   <option value="DIEN_LANG">Điện lạnh (Điều hòa/Tủ lạnh)</option>
@@ -392,12 +460,12 @@ export function MaintenancePage() {
                 <select
                   value={priorityInput}
                   onChange={(e) => setPriorityInput(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
                 >
-                  <option value="LOW">Thấp (Low)</option>
-                  <option value="MEDIUM">Trung bình (Medium)</option>
-                  <option value="HIGH">Cao (High)</option>
-                  <option value="URGENT">Khẩn cấp (Urgent)</option>
+                  <option value="LOW">Thấp</option>
+                  <option value="MEDIUM">Trung bình</option>
+                  <option value="HIGH">Cao</option>
+                  <option value="URGENT">Khẩn cấp</option>
                 </select>
               </div>
               <div>
@@ -408,31 +476,31 @@ export function MaintenancePage() {
                   value={descriptionInput}
                   onChange={(e) => setDescriptionInput(e.target.value)}
                   placeholder="Ví dụ: Vòi nước bị rò rỉ mạnh ở nhà vệ sinh..."
-                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Hình ảnh hiện trạng (upload qua Backend vào Cloudinary)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Hình ảnh hiện trạng</label>
                 <input
                   type="file"
                   multiple
                   accept="image/*"
                   onChange={(e) => setBeforeFiles(e.target.files ? Array.from(e.target.files) : [])}
-                  className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                  className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
                 />
               </div>
-              <div className="flex justify-end gap-3 pt-4">
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setIsReportOpen(false)}
-                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                  className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 transition shadow-md"
                 >
                   {loading ? "Đang xử lý..." : "Gửi phản ánh"}
                 </button>
@@ -444,8 +512,8 @@ export function MaintenancePage() {
 
       {/* Modal Assign Technician */}
       {isAssignOpen && activeTicket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
             <h2 className="text-lg font-bold text-slate-900 mb-4">Phân công Kỹ thuật viên</h2>
             <form onSubmit={handleAssignSubmit} className="space-y-4">
               <div>
@@ -453,7 +521,7 @@ export function MaintenancePage() {
                 <select
                   value={selectedTechId}
                   onChange={(e) => setSelectedTechId(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
                 >
                   {technicians.map((t) => (
                     <option key={t.userId} value={t.userId}>
@@ -484,9 +552,9 @@ export function MaintenancePage() {
 
       {/* Modal Complete Ticket */}
       {isCompleteOpen && activeTicket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-bold text-slate-900 mb-4">Cập nhật Hoàn thành Bảo trì</h2>
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100">
+            <h2 className="text-lg font-bold text-slate-900 mb-4">Hoàn thành phiếu bảo trì #{activeTicket.id}</h2>
             <form onSubmit={handleCompleteSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Vật tư / Thiết bị đã dùng (từ Kho)</label>
@@ -497,7 +565,7 @@ export function MaintenancePage() {
                     setSelectedDeviceId(id);
                     setUsedQty(1);
                   }}
-                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
                 >
                   <option value="">-- Không sử dụng vật tư kho --</option>
                   {devices.map((d) => (
@@ -518,7 +586,7 @@ export function MaintenancePage() {
                     max={devices.find((d) => d.id === selectedDeviceId)?.availableQuantity ?? 999}
                     value={usedQty}
                     onChange={(e) => setUsedQty(Number(e.target.value))}
-                    className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
                   />
                 </div>
               )}
@@ -529,11 +597,11 @@ export function MaintenancePage() {
                   value={completeNote}
                   onChange={(e) => setCompleteNote(e.target.value)}
                   placeholder="Ví dụ: Đã thay dây dẫn điện và kiểm tra lại hệ thống..."
-                  className="w-full rounded-lg border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Ảnh chụp kết quả hoàn thành (upload qua Backend vào Cloudinary)</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Ảnh chụp kết quả hoàn thành</label>
                 <input
                   type="file"
                   multiple
@@ -556,6 +624,50 @@ export function MaintenancePage() {
                   className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
                 >
                   {loading ? "Đang xử lý..." : "Xác nhận hoàn thành"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+{/* Modal Cancel Ticket */}
+      {isCancelOpen && activeTicket && (
+        <div className="fixed inset-0 !mt-0 !top-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 rounded-xl bg-rose-50 text-rose-600 border border-rose-200">
+                <XCircle size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Xác nhận hủy phiếu bảo trì</h3>
+                <p className="text-sm text-slate-500">Phiếu #{activeTicket.id} - Phòng {activeTicket.roomNumber}</p>
+              </div>
+            </div>
+            <form onSubmit={handleCancelSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Lý do hủy (không bắt buộc)</label>
+                <textarea
+                  rows={3}
+                  value={cancelReasonInput}
+                  onChange={(e) => setCancelReasonInput(e.target.value)}
+                  placeholder="Nhập lý do hủy phiếu..."
+                  className="w-full rounded-xl border border-slate-300 p-2.5 text-sm focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCancelOpen(false)}
+                  className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="rounded-xl bg-rose-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-rose-700 transition shadow-md"
+                >
+                  {loading ? "Đang hủy..." : "Xác nhận hủy phiếu"}
                 </button>
               </div>
             </form>

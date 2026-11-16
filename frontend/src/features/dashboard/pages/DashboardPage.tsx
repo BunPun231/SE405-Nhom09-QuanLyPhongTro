@@ -5,7 +5,7 @@ import {
   TrendingDown, Wallet, CheckCircle2, Clock, ArrowRight,
   RefreshCw, ChevronRight, CreditCard, Sparkles, HelpCircle, Check, ArrowRightCircle
 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, extractActivityDetail } from "@/lib/utils";
 import { reportService, activityService, type DashboardSummaryResult } from "@/services/reportService";
 import { extractError } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
@@ -72,6 +72,7 @@ export function DashboardPage() {
   const { user } = useAuthStore();
   const { hasCompletedOnboarding, setIsGuideOpen } = useTourGuide();
   const isTenant = (user?.role as string) === "TENANT" || (user?.role as string) === "RESIDENT";
+  const isTechnician = (user?.role as string) === "TECHNICIAN";
 
   // Manager state
   const [data, setData] = useState<DashboardSummaryResult | null>(null);
@@ -101,7 +102,7 @@ export function DashboardPage() {
         setTenantInvoices(res.content || []);
         setCreditBalance(bal);
       } else {
-        if (!hasCompletedOnboarding) {
+        if (!hasCompletedOnboarding && !isTechnician) {
           // Set rich dummy summary data
           setData({
             expectedRevenue: 15200000,
@@ -133,7 +134,9 @@ export function DashboardPage() {
             try {
               const logsResult = await activityService.list(0, 5);
               const mapped = logsResult.content.map(log => ({
-                description: `${log.action} ${log.entityType || ""} (Mã: ${log.entityId || ""})`,
+                description:
+                  extractActivityDetail(log.metadata) ||
+                  `${log.action} ${log.entityType || ""} (Mã: ${log.entityId || ""})`,
                 createdAt: log.timestamp
               }));
               setManagerActivities(mapped);

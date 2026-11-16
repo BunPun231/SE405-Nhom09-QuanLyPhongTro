@@ -48,6 +48,8 @@ export function LoginPage() {
 
       if (result.role === "ADMIN") {
         navigate("/admin/dashboard");
+      } else if (result.role === "TECHNICIAN") {
+        navigate("/maintenance");
       } else {
         navigate("/dashboard");
       }

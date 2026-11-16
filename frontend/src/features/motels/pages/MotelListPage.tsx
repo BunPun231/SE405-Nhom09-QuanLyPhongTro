@@ -10,6 +10,8 @@ import { BulkAddRoomModal } from "../components/BulkAddRoomModal";
 import { motelService, roomService, type MotelResult, type RoomResult } from "@/services/motelService";
 import { extractError } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 const ROOM_STATUS_LABEL: Record<string, string> = {
   AVAILABLE: "Trống",
@@ -36,6 +38,8 @@ const ROOM_CARD_BORDER: Record<string, string> = {
 };
 
 export function MotelListPage() {
+  const toast = useToast();
+  const confirm = useConfirm();
   const { refreshStatus } = useTourGuide();
   const [motels, setMotels] = useState<MotelResult[]>([]);
   const [selectedMotelId, setSelectedMotelId] = useState<number | null>(null);
@@ -89,13 +93,19 @@ export function MotelListPage() {
 
   const handleDeleteMotel = async () => {
     if (!activeMotel) return;
-    if (!confirm(`Bạn có chắc chắn muốn xóa khu trọ "${activeMotel.name}" không? Toàn bộ phòng và dữ liệu liên quan sẽ bị xóa.`)) return;
+    const ok = await confirm({
+      title: "Xóa khu trọ",
+      message: `Bạn có chắc chắn muốn xóa khu trọ "${activeMotel.name}" không? Toàn bộ phòng và dữ liệu liên quan sẽ bị xóa.`,
+      confirmText: "Xóa khu trọ",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       await motelService.delete(activeMotel.id);
       setSelectedMotelId(null);
       fetchMotels();
     } catch (err) {
-      alert(extractError(err));
+      toast.error(extractError(err));
     }
   };
 

@@ -137,6 +137,19 @@ public class TechnicianService {
     }
 
     /**
+     * Unlock technician account.
+     */
+    @Transactional
+    public void unlock(UUID techId) {
+        UUID tenantId = SecurityUtils.requireTenantId();
+        UserEntity user = userJpaRepository.findById(techId)
+                .filter(u -> tenantId.equals(u.getTenantId()) && "TECHNICIAN".equals(u.getRole()))
+                .orElseThrow(() -> BaseException.notFound("Technician", techId));
+        user.setStatus("ACTIVE");
+        user.setLockReason(null);
+        userJpaRepository.save(user);
+    }
+    /**
      * UC62: Reset technician password.
      */
     @Transactional

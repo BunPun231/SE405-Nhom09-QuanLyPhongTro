@@ -19,5 +19,7 @@ public interface RoomRepository {
 
     Page<Room> findByMotelId(Long motelId, Pageable pageable);
 
+    Page<Room> findByMotelIdAndStatus(Long motelId, com.roomrental.modules.room.domain.model.RoomStatus status, Pageable pageable);
+
     boolean existsByMotelIdAndRoomNumber(Long motelId, String roomNumber);
 }

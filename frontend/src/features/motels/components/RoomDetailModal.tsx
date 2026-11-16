@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/Input";
 import { RoomResult, roomService } from "@/services/motelService";
 import { formatCurrency, formatVnStyle, stripVnStyle } from "@/lib/utils";
 import { extractError } from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 interface RoomDetailModalProps {
   isOpen: boolean;
@@ -14,6 +16,8 @@ interface RoomDetailModalProps {
 }
 
 export function RoomDetailModal({ isOpen, onClose, room, onSuccess }: RoomDetailModalProps) {
+  const toast = useToast();
+  const confirm = useConfirm();
   const [isEditing, setIsEditing] = useState(false);
   const [status, setStatus] = useState(room.status);
   
@@ -33,7 +37,7 @@ export function RoomDetailModal({ isOpen, onClose, room, onSuccess }: RoomDetail
       setStatus(newStatus as any);
       onSuccess?.();
     } catch (err) {
-      alert(extractError(err));
+      toast.error(extractError(err));
       setStatus(room.status);
     }
   };
@@ -60,13 +64,19 @@ export function RoomDetailModal({ isOpen, onClose, room, onSuccess }: RoomDetail
   };
 
   const handleDelete = async () => {
-    if (!confirm(`Xóa phòng ${room.roomNumber}? Thao tác này không thể hoàn tác.`)) return;
+    const ok = await confirm({
+      title: "Xóa phòng",
+      message: `Xóa phòng ${room.roomNumber}? Thao tác này không thể hoàn tác.`,
+      confirmText: "Xóa phòng",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       await roomService.delete(room.motelId, room.hashid);
       onClose();
       onSuccess?.();
     } catch (err) {
-      alert(extractError(err));
+      toast.error(extractError(err));
     }
   };
 
