@@ -4,7 +4,7 @@ import { technicianService, TechnicianResponse } from "@/services/technicianServ
 import { motelService, MotelResult } from "@/services/motelService";
 import { deviceService, DeviceResponse } from "@/services/deviceService";
 import { useAuthStore } from "@/store/authStore";
-import { Hammer, Plus, UserCheck, CheckCircle2, Image as ImageIcon, Eye, XCircle } from "lucide-react";
+import { Hammer, Plus, UserCheck, CheckCircle2, Image as ImageIcon, XCircle } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { RoomSelector } from "@/components/ui/RoomSelector";
 import { TicketDetailModal } from "@/features/maintenance/components/TicketDetailModal";
@@ -314,7 +314,7 @@ export function MaintenancePage() {
                 setActiveTicket(ticket);
                 setIsDetailOpen(true);
               }}
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition space-y-4 cursor-pointer"
+              className="flex flex-col h-full rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:shadow-md transition space-y-4 cursor-pointer"
             >
               <div className="flex items-start justify-between">
                 <div>
@@ -373,51 +373,43 @@ export function MaintenancePage() {
               )}
 
               {/* Actions */}
-              <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveTicket(ticket);
-                    setIsDetailOpen(true);
-                  }}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-indigo-700"
-                >
-                  <Eye size={14} /> Xem chi tiết
-                </button>
-
-                <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              {((isManager && ticket.status === "OPEN") ||
+                ((isTechnician || isManager) && ["OPEN", "ASSIGNED", "PROCESSING"].includes(ticket.status))) && (
+                <div className="mt-auto pt-3 border-t border-slate-100 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                   {isManager && ticket.status === "OPEN" && (
                     <button
+                      type="button"
                       onClick={() => openAssignModal(ticket)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-50 px-2.5 py-2 text-xs font-medium text-indigo-700 hover:bg-indigo-100 whitespace-nowrap"
                     >
-                      <UserCheck className="h-3.5 w-3.5" /> Phân công KTV
+                      <UserCheck className="h-3.5 w-3.5" /> Phân công
                     </button>
                   )}
-                  {((isTechnician && (ticket.status === "OPEN" || ticket.status === "ASSIGNED" || ticket.status === "PROCESSING")) ||
+                  {((isTechnician && ["OPEN", "ASSIGNED", "PROCESSING"].includes(ticket.status)) ||
                     (isManager && ["OPEN", "ASSIGNED", "PROCESSING"].includes(ticket.status))) && (
                     <button
+                      type="button"
                       onClick={() => openCompleteModal(ticket)}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 py-2 text-xs font-medium text-white hover:bg-emerald-700 whitespace-nowrap"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" /> Hoàn thành
                     </button>
                   )}
-                  {(ticket.status === "OPEN" || ticket.status === "ASSIGNED") && (
+                  {isManager && (ticket.status === "OPEN" || ticket.status === "ASSIGNED") && (
                     <button
+                      type="button"
                       onClick={() => {
                         setActiveTicket(ticket);
                         setCancelReasonInput("");
                         setIsCancelOpen(true);
                       }}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-rose-50 px-2.5 py-2 text-xs font-medium text-rose-700 hover:bg-rose-100 whitespace-nowrap"
                     >
-                      <XCircle className="h-3.5 w-3.5" /> Hủy phiếu
+                      <XCircle className="h-3.5 w-3.5" /> Hủy
                     </button>
                   )}
                 </div>
-              </div>
+              )}
             </div>
           ))
         )}

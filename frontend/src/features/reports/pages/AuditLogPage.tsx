@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button";
 import { Search, RefreshCw, AlertCircle, Activity } from "lucide-react";
 import { auditService, activityService, type AuditLogResult } from "@/services/reportService";
 import { extractError } from "@/lib/api";
+import { extractActivityDetail } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 
 const ACTION_VARIANT: Record<string, "danger" | "success" | "warning" | "default"> = {
@@ -72,6 +73,7 @@ const ACTION_LABELS: Record<string, string> = {
   CREATE_DEVICE: "Thêm thiết bị mới",
   UPDATE_DEVICE: "Cập nhật thiết bị",
   DELETE_DEVICE: "Xóa thiết bị",
+  UPDATE_DEVICE_PRICE: "Cập nhật giá mua thiết bị",
 };
 
 const ENTITY_LABELS: Record<string, string> = {
@@ -121,9 +123,21 @@ function getActionBadge(action: string | undefined | null) {
   );
 }
 
-function getEntityDescription(type: string | undefined | null, id: string | undefined | null) {
+function getEntityDescription(
+  type: string | undefined | null,
+  id: string | undefined | null,
+  oldValue?: string | null,
+  newValue?: string | null,
+) {
   if (!type) return "-";
   const label = getEntityLabel(type);
+
+  // Prefer the backend-formatted label (e.g. "Máy lạnh Daikin (FTKZ25VVMV) • #11")
+  const formatted = newValue || oldValue;
+  if (formatted && formatted.includes("#") && formatted.includes("(")) {
+    return formatted;
+  }
+
   if (!id) return label;
   
   const isUuid = id.length === 36 && id.includes("-");
@@ -182,12 +196,14 @@ export function AuditLogPage() {
     const entityLabel = getEntityLabel(log.entityType).toLowerCase();
     const roleLabel = getRoleLabel(log.actorRole).toLowerCase();
     const entityDesc = getEntityDescription(log.entityType, log.entityId).toLowerCase();
+    const detail = (extractActivityDetail(log.metadata) || "").toLowerCase();
     
     return (
       actionLabel.includes(q) ||
       entityLabel.includes(q) ||
       roleLabel.includes(q) ||
       entityDesc.includes(q) ||
+      detail.includes(q) ||
       (log.ipAddress && log.ipAddress.toLowerCase().includes(q))
     );
   });
@@ -249,6 +265,7 @@ export function AuditLogPage() {
                 <TableHead>Người thực hiện</TableHead>
                 <TableHead>Hành động</TableHead>
                 <TableHead>Đối tượng tác động</TableHead>
+                <TableHead>Chi tiết</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -267,7 +284,20 @@ export function AuditLogPage() {
                   </TableCell>
                   <TableCell>{getActionBadge(log.action)}</TableCell>
                   <TableCell className="text-sm text-slate-600 font-medium">
-                    {getEntityDescription(log.entityType, log.entityId)}
+                    {getEntityDescription(log.entityType, log.entityId, log.oldValue, log.newValue)}
+                  </TableCell>
+                  <TableCell className="text-xs text-slate-600 max-w-xs">
+                    {extractActivityDetail(log.metadata) ? (
+                      <span className="block whitespace-pre-wrap break-words">
+                        {extractActivityDetail(log.metadata)}
+                      </span>
+                    ) : log.oldValue || log.newValue ? (
+                      <span className="block text-slate-500">
+                        {log.oldValue || "-"} <span className="text-slate-400">→</span> {log.newValue || "-"}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300">-</span>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}

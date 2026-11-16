@@ -5,7 +5,7 @@ import {
   TrendingDown, Wallet, CheckCircle2, Clock, ArrowRight,
   RefreshCw, ChevronRight, CreditCard, Sparkles, HelpCircle, Check, ArrowRightCircle
 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, extractActivityDetail } from "@/lib/utils";
 import { reportService, activityService, type DashboardSummaryResult } from "@/services/reportService";
 import { extractError } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
@@ -134,7 +134,9 @@ export function DashboardPage() {
             try {
               const logsResult = await activityService.list(0, 5);
               const mapped = logsResult.content.map(log => ({
-                description: `${log.action} ${log.entityType || ""} (Mã: ${log.entityId || ""})`,
+                description:
+                  extractActivityDetail(log.metadata) ||
+                  `${log.action} ${log.entityType || ""} (Mã: ${log.entityId || ""})`,
                 createdAt: log.timestamp
               }));
               setManagerActivities(mapped);

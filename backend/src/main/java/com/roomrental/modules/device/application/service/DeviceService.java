@@ -78,7 +78,7 @@ public class DeviceService {
         UUID tenantId = SecurityUtils.requireTenantId();
         eventPublisher.publishEvent(new DeviceCreatedEvent(
                 tenantId, SecurityUtils.getCurrentUserId(), SecurityUtils.getCurrentRole(),
-                result.id(), result.name()));
+                result.id(), result.name(), result.brand()));
         return result;
     }
 
@@ -120,12 +120,12 @@ public class DeviceService {
         UUID tenantId = SecurityUtils.requireTenantId();
         eventPublisher.publishEvent(new DeviceUpdatedEvent(
                 tenantId, SecurityUtils.getCurrentUserId(), SecurityUtils.getCurrentRole(),
-                result.id(), oldName, result.name()));
+                result.id(), oldName, result.name(), result.brand()));
 
         if (command.purchasePrice() != null && (oldPrice == null || !oldPrice.equals(command.purchasePrice()))) {
             eventPublisher.publishEvent(new com.roomrental.modules.device.application.event.DevicePriceUpdatedEvent(
                     tenantId, SecurityUtils.getCurrentUserId(), SecurityUtils.getCurrentRole(),
-                    result.id(), result.name(), oldPrice, command.purchasePrice()));
+                    result.id(), result.name(), result.brand(), oldPrice, command.purchasePrice()));
         }
         return result;
     }
@@ -187,7 +187,7 @@ public class DeviceService {
         UUID tenantId = SecurityUtils.requireTenantId();
         eventPublisher.publishEvent(new DeviceDeletedEvent(
                 tenantId, SecurityUtils.getCurrentUserId(), SecurityUtils.getCurrentRole(),
-                deviceId, device.getName()));
+                deviceId, device.getName(), device.getBrand()));
     }
 
     @Transactional(readOnly = true)
